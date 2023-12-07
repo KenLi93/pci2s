@@ -1,6 +1,6 @@
 #' Proximal causal inference with survival outcome using two-stage-least-square
 #'
-#' 'pcis2s()' computes the adjusted hazard difference using additive hazards model by
+#' 'pciah2s()' computes the adjusted hazard difference using additive hazards model by
 #' Lin \& Ying 1994, using a pair of negative control variable to control for unmeasured
 #' confounding
 #'
@@ -43,14 +43,14 @@
 #' W <- cbind(rnbinom(N, size = 25,
 #'                    mu = exp(2.5 * U + 0.2 * X)),
 #'            W2)
-#' pcis2s(Y = Y, D = D, A = A, X = X,
+#' pciah2s(Y = Y, D = D, A = A, X = X,
 #'        W = W, Z = Z, nboot = 100,
 #'        nco_type = c("negbin", "ah"),
 #'        nco_args = list(list(offset = rep(0, N)),
 #'                        list(offset = rep(0, N),
 #'                             event = D2)))
 #' @export
-pcis2s <- function(Y, D, A, X = NULL, W, Z = NULL, Xw = NULL,
+pciah2s <- function(Y, D, A, X = NULL, W, Z = NULL, Xw = NULL,
                    Xy = NULL,
                    nboot = 2000,
                    nco_type = NULL,
