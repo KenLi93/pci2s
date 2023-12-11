@@ -1,0 +1,15 @@
+source('loglin.R')
+library(MASS)
+p <- read.csv("https://stats.idre.ucla.edu/stat/data/poisson_sim.csv")
+summary(m1 <- glm(num_awards ~  prog + math, family="poisson", data=p))
+y  <- p$num_awards
+x  <- model.matrix(m1)
+poisson_fit.out <- poisson_fit(y, x, variance =F)
+
+loglin_fit.out <- loglin_fit(y, x, variance = F)
+
+data.frame( coef(m1), poisson_fit.out$ESTIMATE, loglin_fit.out$ESTIMATE)
+
+m2 <- glm.nb(num_awards ~ prog + math, data = p)
+negbin_fit.out <- negbin_fit(y, x)
+data.frame(coef(m2), negbin_fit.out$ESTIMATE[-1])
