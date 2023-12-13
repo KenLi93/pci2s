@@ -24,7 +24,8 @@
 #' @param nco_args A list of length nW containing additional arguments for the first-stage models.
 #' Each element in the list is a sublist and should contain a vector named "offset" (default 0).
 #' If nco_type == "ah", the sublist needs to include another vector named "event" as the event indicator
-#' (default 1)
+#' (default 1). If nco_type == "negbin", the sublist needs to include a vector "init" as the initial values,
+#' which can be NA.
 #' @param se_method Method to compute the standard error, can be one of "all", "analytic", "exponential multiplier",
 #' "gaussian multiplier" or "none".
 #' @returns A list with three elements: ESTIMATE includes the parameter estimates from the second-stage
@@ -51,11 +52,11 @@
 #'                             event = D2)))
 #' @export
 pciah2s <- function(Y, D, A, X = NULL, W, Z = NULL, Xw = NULL,
-                   Xy = NULL,
-                   nboot = 2000,
-                   nco_type = NULL,
-                   nco_args = NULL,
-                   se_method = "all") {
+                    Xy = NULL,
+                    nboot = 2000,
+                    nco_type = NULL,
+                    nco_args = NULL,
+                    se_method = "all") {
 
 
 
@@ -135,6 +136,9 @@ pciah2s <- function(Y, D, A, X = NULL, W, Z = NULL, Xw = NULL,
                          if (nco_type[i] == "ah") {
                            list(offset = rep(0, nn),
                                 event = rep(1, nn))
+                         } else if (nco_type[i] == "negbin") {
+                           list(offset = rep(0, nn),
+                                init = NA)
                          } else {
                            list(offset = rep(0, nn))
                          }
@@ -187,9 +191,24 @@ pciah2s <- function(Y, D, A, X = NULL, W, Z = NULL, Xw = NULL,
   for (j in 1:nW) {
     Wj <- W1[, j]
     Xwj <- Xw1[[j]]
+    offset_j <- nco_args[[j]]$offset
+    if (is.null(offset_j)) {
+      offset_j <- rep(0, nn)
+    }
+    event_j <- nco_args[[j]]$event
+    if (is.null(event_j)) {
+      if (nco_type[j] == "ah") {
+        warning("Event indicator for the NCO not specified -- assume no censoring.")
+      }
+      event_j <- rep(1, nn)
+    }
+    init_j <- nco_args[[j]]$init
+    if (is.null(init_j)) {
+      init_j <- NA
+    }
     if (nco_type[j] == "linear") {
-      W_model <- linear_fit(y = Wj, x = Xwj, offset = nco_args[[j]]$offset,
-                                  variance = T)
+      W_model <- linear_fit(y = Wj, x = Xwj, offset = offset_j,
+                            variance = T)
       ## no nuisance parameter
       param_1s[[j]] <- W_model$ESTIMATE
       U1j[[j]] <- W_model$EST_FUNC
@@ -198,8 +217,8 @@ pciah2s <- function(Y, D, A, X = NULL, W, Z = NULL, Xw = NULL,
       nparam1_nuisance[j] <- 0
       W_hat[, j] <- c(Xwj %*% param_1s[[j]])
     } else if (nco_type[j] == "loglin") {
-      W_model <- loglin_fit(y = Wj, x = Xwj, offset = nco_args[[j]]$offset,
-                                  variance = T)
+      W_model <- loglin_fit(y = Wj, x = Xwj, offset = offset_j,
+                            variance = T)
 
       ## no nuisance parameter
       param_1s[[j]] <- W_model$ESTIMATE
@@ -209,8 +228,8 @@ pciah2s <- function(Y, D, A, X = NULL, W, Z = NULL, Xw = NULL,
       nparam1_nuisance[j] <- 0
       W_hat[, j] <- c(Xwj %*% param_1s[[j]])
     } else if (nco_type[j] == "poisson") {
-      W_model <- poisson_fit(y = Wj, x = Xwj, offset = nco_args[[j]]$offset,
-                                  variance = T)
+      W_model <- poisson_fit(y = Wj, x = Xwj, offset = offset_j,
+                             variance = T)
 
       ## no nuisance parameter
       param_1s[[j]] <- W_model$ESTIMATE
@@ -220,8 +239,8 @@ pciah2s <- function(Y, D, A, X = NULL, W, Z = NULL, Xw = NULL,
       nparam1_nuisance[j] <- 0
       W_hat[, j] <- c(Xwj %*% param_1s[[j]])
     } else if (nco_type[j] == "ah") {
-      W_model <- lin_ah(time = Wj, event = nco_args[[j]]$event,
-                             covariates = Xwj, offset = nco_args[[j]]$offset)
+      W_model <- lin_ah(time = Wj, event = event_j,
+                        covariates = Xwj, offset = offset_j)
 
       ## no nuisance parameter
       param_1s[[j]] <- W_model$ESTIMATE
@@ -231,8 +250,8 @@ pciah2s <- function(Y, D, A, X = NULL, W, Z = NULL, Xw = NULL,
       nparam1_nuisance[j] <- 0
       W_hat[, j] <- c(Xwj %*% param_1s[[j]])
     } else if (nco_type[j] == "negbin") {
-      W_model <- negbin_fit(y = Wj, x = Xwj, offset = nco_args[[j]]$offset,
-                            variance = T)
+      W_model <- negbin_fit(y = Wj, x = Xwj, offset = offset_j,
+                            variance = T, init = init_j)
 
       ## one nuisance parameter
       param_1s[[j]] <- W_model$ESTIMATE
@@ -437,8 +456,8 @@ pciah2s <- function(Y, D, A, X = NULL, W, Z = NULL, Xw = NULL,
 
     for (b in 1:nboot) {
       est_boot[b, ] <- lin_ah(time = Y, event = D,
-                            covariates = S2,
-                            weights = rexp(nn), variance = FALSE)$ESTIMATE
+                              covariates = S2,
+                              weights = rexp(nn), variance = FALSE)$ESTIMATE
     }
 
     SE_exponential_multiplier <- apply(est_boot, 2, sd) ## 0.5864
@@ -447,7 +466,7 @@ pciah2s <- function(Y, D, A, X = NULL, W, Z = NULL, Xw = NULL,
   if (se_method == "all") {
     SE <- rbind(SE_analytic, SE_gaussian_multiplier, SE_exponential_multiplier)
     rownames(SE) <- c("analytic", "gaussian multiplier",
-                   "exponential multiplier")
+                      "exponential multiplier")
   } else if (se_method == "analytic") {
     SE <- SE_analytic
   } else if (se_method == "gaussian multiplier") {

@@ -16,6 +16,7 @@ pcinb2s(
   nboot = 2000,
   nco_type = NULL,
   nco_args = NULL,
+  nb_init = NA,
   se_method = "analytic"
 )
 }
@@ -49,7 +50,8 @@ Default to be X}
 \item{nco_args}{A list of length nW containing additional arguments for the first-stage models.
 Each element in the list is a sublist and should contain a vector named "offset" (default 0).
 If nco_type == "ah", the sublist needs to include another vector named "event" as the event indicator
-(default 1)}
+(default 1). If nco_type == "negbin", the sublist needs to include a vector "init" as the initial values,
+which can be NA.}
 
 \item{se_method}{Method to compute the standard error, can be one of "all", "analytic", "exponential multiplier",
 "gaussian multiplier" or "none".}

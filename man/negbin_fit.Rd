@@ -9,7 +9,8 @@ negbin_fit(
   x,
   offset = rep(0, length(y)),
   variance = TRUE,
-  interval = c(-100, 100)
+  interval = c(-100, 100),
+  init = NA
 )
 }
 \arguments{
@@ -20,6 +21,9 @@ negbin_fit(
 \item{offset}{n-vector of offset}
 
 \item{variance}{whether to return the variance and components for the calculation}
+
+\item{init}{a vector of length ncol(x)+1, initial values for the negative-binomial regression.
+Default is crude estimates of the result.}
 }
 \description{
 Fit negative-binomial regression model Y | X ~ NegativeBinomial(theta, exp(offset + beta * x))

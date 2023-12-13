@@ -7,7 +7,7 @@
 #' @param variance whether to return the variance and components for the calculation
 #' @export
 loglin_fit <- function(y, x, offset = rep(0, length(y)),
-                        variance = TRUE, interval = c(-100, 100)) {
+                       variance = TRUE, interval = c(-100, 100)) {
 
   x <- matrix(x, nrow = length(y))
 
@@ -61,7 +61,7 @@ loglin_fit <- function(y, x, offset = rep(0, length(y)),
 #' @param variance whether to return the variance and components for the calculation
 #' @export
 poisson_fit <- function(y, x, offset = rep(0, length(y)),
-                       variance = TRUE, interval = c(-100, 100)) {
+                        variance = TRUE, interval = c(-100, 100)) {
 
   x <- matrix(x, nrow = length(y))
 
@@ -116,9 +116,12 @@ poisson_fit <- function(y, x, offset = rep(0, length(y)),
 #' @param x design matrix
 #' @param offset n-vector of offset
 #' @param variance whether to return the variance and components for the calculation
+#' @param init a vector of length ncol(x)+1, initial values for the negative-binomial regression.
+#' Default is crude estimates of the result.
 #' @export
 negbin_fit <- function(y, x, offset = rep(0, length(y)),
-                        variance = TRUE, interval = c(-100, 100)) {
+                       variance = TRUE, interval = c(-100, 100),
+                       init = NA) {
   nn <- length(y)
   x <- matrix(x, nrow = nn)
 
@@ -139,16 +142,13 @@ negbin_fit <- function(y, x, offset = rep(0, length(y)),
 
     return(-sum(loglik))
   }
-  ## initial value: by log-linear model
-  beta_init <- loglin_fit(y = y, x = x, offset = offset, variance = FALSE)$ESTIMATE
 
   ## negative log likelihood for theta, with fixed beta
   negloglik_thet <- function(thet) {
     negloglik(c(thet, beta_init))
   }
 
-  thet_init <- optimize(negloglik_thet, c(0.001, 100))$minimum
-  ## score equation
+   ## score equation
   U_loglin <- function(par) {
     thet <- par[1]; bb <- par[-1]
     mu <- exp(c(offset) + c(x %*% bb))
@@ -156,7 +156,7 @@ negbin_fit <- function(y, x, offset = rep(0, length(y)),
 
     for (i in 1:nn) {
       u_thet[i] <- log(thet / (thet + mu[i])) +
-                                ifelse(y[i] == 0, 0, sum(1 / (0:(y[i] - 1) + thet))) +
+        ifelse(y[i] == 0, 0, sum(1 / (0:(y[i] - 1) + thet))) +
         (mu[i] - y[i]) / (thet + mu[i])
     }
 
@@ -175,11 +175,18 @@ negbin_fit <- function(y, x, offset = rep(0, length(y)),
   est_func <- function(par) {
     sum(colMeans(U_loglin(par)) ^ 2)
   }
+  if (is.na(init)) {
+    ## initial value: by log-linear model
+    beta_init <- loglin_fit(y = y, x = x, offset = offset, variance = FALSE)$ESTIMATE
+    thet_init <- optimize(negloglik_thet, c(0.001, 100))$minimum
 
-  param_init <- optim(par = c(thet_init, beta_init),
-                      fn = est_func,
-                      lower = c(0.001, rep(-Inf, ncol(x))),
-                      method = "L-BFGS-B")$par
+    param_init <- optim(par = c(thet_init, beta_init),
+                        fn = est_func,
+                        lower = c(0.001, rep(-Inf, ncol(x))),
+                        method = "L-BFGS-B")$par
+  } else {
+    init <- init
+  }
   param <- optim(par = param_init,
                  fn = negloglik, gr = negscore,
                  lower = c(0.001, rep(-Inf, ncol(x))),
