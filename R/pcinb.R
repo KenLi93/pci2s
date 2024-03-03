@@ -25,12 +25,12 @@
 #' If nco_type == "ah", the sublist needs to include another vector named "event" as the event indicator
 #' (default 1). If nco_type == "negbin", the sublist needs to include a vector "init" as the initial values,
 #' which can be NA.
-#' @param se_method Method to compute the standard error, can be one of "all", "analytic", "exponential multiplier",
-#' "gaussian multiplier" or "none".
+#' @param se_method Method to compute the standard error, can be "analytic", "gaussian multiplier" or "none".
 #' @returns A list with three elements: ESTIMATE includes the parameter estimates from the second-stage
 #' model; SE produces their standard error, and PARAM includes all parameter estimates
 #' @examples
 #' N <- 2000
+#' expit  <-  function(x) exp(x)/(1 + exp(x))
 #' U <- runif(N); X <- runif(N)
 #' A <- rbinom(N, 1, expit(-3 + 5 * U + 1 * X))
 #' Y <- rpois(N, exp(0.2 + 1.5 * U + 0.2 * X + 0.2 * A))
@@ -55,7 +55,7 @@ pcinb2s <- function(Y, offset = rep(0, length(Y)),
                     nco_type = NULL,
                     nco_args = NULL,
                     nb_init = NA,
-                    se_method = "analytic") {
+                    se_method = "analytic", verbose=F) {
 
 
 
@@ -171,7 +171,7 @@ pcinb2s <- function(Y, offset = rep(0, length(Y)),
       offset_j <- rep(0, nn)
     }
     event_j <- nco_args[[j]]$event
-    if (is.null(event_j)) {
+    if (nco_type[j] == "ah" & is.null(event_j)) {
       warning("Event indicator for the NCO not specified -- assume no censoring.")
       event_j <- rep(1, nn)
     }
@@ -247,6 +247,16 @@ pcinb2s <- function(Y, offset = rep(0, length(Y)),
   param_2_beta <- param_2s[-1] ## regression coefficients
   params <- as.numeric(c(unlist(param_1s), param_2s))
 
+
+  if (verbose) {
+      # The number of stage 1 parameters is only correct for when stage 1 is negative binomial and additive hazard models
+      negbin.stage1.nparam  <-  (1+1+ 1+ncol(X0)+ ncol(Z0)+ncol(X0)+ ncol(Z0))*sum(nco_type=='negbin') # Each negbin has 1 nuisance + intercept + A + X + Z + AX + AZ
+      ah.stage1.nparam  <- (1+ncol(X0)+ ncol(Z0)+ncol(X0)+ ncol(Z0))*sum(nco_type=='ah')  # Each ah has  A + X + Z + AX + AZ (no intercept)
+      stage2.nparam  <-  (1+ 1 + ncol(Xy0) + ncol(W_hat)) # nuisance + intercept + A + X + W_hat
+      print(sprintf('Number of params: Negbin stage 1: %d, AH stage 1: %d, stage2: %d, total: %d, check: %d', negbin.stage1.nparam, ah.stage1.nparam, stage2.nparam, negbin.stage1.nparam+ah.stage1.nparam+stage2.nparam, length(params)))
+  }
+
+
   if (se_method %in% c("analytic", "gaussian multiplier")) {
 
     np_s2 <- length(param_2s) ## number of parameters in the second stage model
@@ -284,6 +294,9 @@ pcinb2s <- function(Y, offset = rep(0, length(Y)),
       dS2_i <- rbind(matrix(0, nrow = 1 + ncol(Xy0), ncol = sum(nparam1_main)),
                      dW_i[, , i])
       mu_i <- exp(eta0[i] + c(S2[i, ] %*% param_2_beta))
+        # if (mu_i > 100){
+        #       print(sprintf('%d, %.0e',i, mu_i))
+    # }
       J21_i1 <- (param_2_theta + mu_i) / param_2_theta * mu_i *
         t(param_2_beta) %*% dS2_i +
         (param_2_theta + Y0[i]) / (param_2_theta + mu_i) ^ 2 * mu_i *
@@ -317,12 +330,17 @@ pcinb2s <- function(Y, offset = rep(0, length(Y)),
     J22 <- negbin_result$JACOBIAN
 
     JJ <- rbind(cbind(J11, J12), cbind(J21, J22))
+    if (verbose) {
+        dout  <- svd(JJ)$d
+        print(sprintf('Condition number of the Fisher information matrix is %1.1e', dout[1]/dout[length(dout)]))
+    }
 
     Jinv <- solve(JJ)
   }
 
 
 
+  names(param_2s)  <-  c('size', 'A', sprintf('X%d', 1:ncol(Xy0)), sprintf('W%d', 1:ncol(W_hat)))
   ## parameter of interests are regression coefficients in the second stage
   ## model
   if (se_method == "analytic") {
@@ -330,6 +348,7 @@ pcinb2s <- function(Y, offset = rep(0, length(Y)),
 
     VAR_analytic <- Jinv %*% DD %*% t(Jinv)
     SE <- tail(sqrt(diag(VAR_analytic)), np_s2)
+    names(SE)  <-  names(param_2s)
   }
 
   if (se_method %in% c("gaussian multiplier")) {
@@ -342,12 +361,12 @@ pcinb2s <- function(Y, offset = rep(0, length(Y)),
     }
 
     SE <- tail(apply(est_boot, 2, sd), np_s2)
+    names(SE)  <-  names(param_2s)
   }
 
   if (se_method == "none") {
     SE <- NULL
   }
-
 
 
   return(list(ESTIMATE = param_2s,
