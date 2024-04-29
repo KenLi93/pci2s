@@ -33,6 +33,7 @@
 #' @examples
 #' N <- 2000
 #' U <- runif(N); X <- runif(N)
+#' expit  <-  function(x) exp(x)/(1 + exp(x))
 #' A <- rbinom(N, 1, expit(-3 + 5 * U + 1 * X))
 #' Y <- rexp(N, 0.2 + 1.5 * U + 0.2 * X + 0.2 * A)
 #' D <- as.numeric(Y < 5)
@@ -56,7 +57,7 @@ pciah2s <- function(Y, D, A, X = NULL, W, Z = NULL, Xw = NULL,
                     nboot = 2000,
                     nco_type = NULL,
                     nco_args = NULL,
-                    se_method = "all") {
+                    se_method = "all", verbose =F) {
 
 
 
@@ -166,7 +167,7 @@ pciah2s <- function(Y, D, A, X = NULL, W, Z = NULL, Xw = NULL,
   dtime <- c(t2[1], diff(t2)) # increments of unique time points
 
   # obtain the order of time
-  o1 <- left_join(data.frame(t1 = t1),
+  o1 <- dplyr::left_join(data.frame(t1 = t1),
                   data.frame(t1 = t2, o1 = 1:length(unique(t1))),
                   by = "t1")$o1
   tmin <- sapply(1:ntime, function(k) min(which(o1 == k)))
@@ -425,6 +426,10 @@ pciah2s <- function(Y, D, A, X = NULL, W, Z = NULL, Xw = NULL,
 
     JJ <- rbind(cbind(J11, J12), cbind(J21, J22))
 
+    if (verbose) {
+        dout  <- svd(JJ)$d
+        print(sprintf('Condition number of the Fisher information matrix is %1.1e', dout[1]/dout[length(dout)]))
+    }
     Jinv <- solve(JJ)
   }
 
@@ -476,6 +481,7 @@ pciah2s <- function(Y, D, A, X = NULL, W, Z = NULL, Xw = NULL,
   } else if (se_method == "none") {
     SE <- NULL
   }
+  names(param_2s)  <-  c( 'A', sprintf('X%d', 1:ncol(Xy0)), sprintf('W%d', 1:ncol(W_hat)))
 
   return(list(ESTIMATE = param_2s,
               SE = SE,

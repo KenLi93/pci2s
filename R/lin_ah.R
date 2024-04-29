@@ -34,7 +34,7 @@ lin_ah <- function(time, event, covariates, weights = NULL,
   ntime <- length(t2) # length of unique time points
   
   # obtain the order of time 
-  o1 <- left_join(data.frame(t1 = t1), 
+  o1 <- dplyr::left_join(data.frame(t1 = t1), 
                   data.frame(t1 = t2, o1 = 1:length(unique(t1))),
                   by = "t1")$o1
   

@@ -175,7 +175,7 @@ negbin_fit <- function(y, x, offset = rep(0, length(y)),
   est_func <- function(par) {
     sum(colMeans(U_loglin(par)) ^ 2)
   }
-  if (is.na(init)) {
+  if (length(init ) == 1 && is.na(init)) {
     ## initial value: by log-linear model
     beta_init <- loglin_fit(y = y, x = x, offset = offset, variance = FALSE)$ESTIMATE
     thet_init <- optimize(negloglik_thet, c(0.001, 100))$minimum
@@ -185,7 +185,10 @@ negbin_fit <- function(y, x, offset = rep(0, length(y)),
                         lower = c(0.001, rep(-Inf, ncol(x))),
                         method = "L-BFGS-B")$par
   } else {
-    init <- init
+      if (length(init) != ncol(x) + 1) {
+        stop(sprintf("length(init) must be %d", ncol(x) + 1))
+      }
+    param_init <- init
   }
   param <- optim(par = param_init,
                  fn = negloglik, gr = negscore,
