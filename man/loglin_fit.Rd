@@ -22,5 +22,15 @@ loglin_fit(
 \item{variance}{whether to return the variance and components for the calculation}
 }
 \description{
-Fit semiparametric log-linear model E[Y | X] = exp(offset + beta * x)
+Fit semiparametric log-linear model E[Y | X] = exp(offset + beta * x).
+This is a utility function. For formal log-linear regression models,
+the glm function is recommended
+}
+\examples{
+x <- cbind(1, rep(1:3, each = 10))
+tt <- rep(1:2, 15)
+y <- rpois(30, lambda = tt * exp(x[, 1] + 0.5 * x[, 2]))
+
+loglin_result <- loglin_fit(y, x, offset = log(tt))
+loglin_result$summary
 }

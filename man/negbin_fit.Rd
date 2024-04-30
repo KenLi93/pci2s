@@ -26,5 +26,15 @@ negbin_fit(
 Default is crude estimates of the result.}
 }
 \description{
-Fit negative-binomial regression model Y | X ~ NegativeBinomial(theta, exp(offset + beta * x))
+Fit negative-binomial regression model Y | X ~ NegativeBinomial(theta, exp(offset + beta * x)).
+This is a utility function. For formal negative-binomial regression models,
+MASS::glm.nb is recommended
+}
+\examples{
+x <- cbind(1, rep(1:3, each = 20))
+tt <- rep(1:2, 30)
+y <- rnbinom(60, size = 2, mu = tt * exp(x[, 1] + 0.5 * x[, 2]))
+
+negbin_result <- negbin_fit(y, x, offset = log(tt))
+negbin_result$summary
 }

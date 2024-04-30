@@ -1,6 +1,6 @@
 #' Proximal causal inference with survival outcome using two-stage-least-square
 #'
-#' 'pciah2s()' computes the adjusted hazard difference using additive hazards model by
+#' This function computes the adjusted hazard difference using additive hazards model by
 #' Lin \& Ying 1994, using a pair of negative control variable to control for unmeasured
 #' confounding
 #'
@@ -26,8 +26,7 @@
 #' If nco_type == "ah", the sublist needs to include another vector named "event" as the event indicator
 #' (default 1). If nco_type == "negbin", the sublist needs to include a vector "init" as the initial values,
 #' which can be NA.
-#' @param se_method Method to compute the standard error, can be one of "all", "analytic", "exponential multiplier",
-#' "gaussian multiplier" or "none".
+#' @param variance whether to return the variance and components for the calculation
 #' @returns A list with three elements: ESTIMATE includes the parameter estimates from the second-stage
 #' model; SE produces their standard error, and PARAM includes all parameter estimates
 #' @examples
@@ -42,22 +41,23 @@
 #' W2 <- rexp(N, 0.1 + 1 * U + 0.1 * X)
 #' D2 <- as.numeric(W2 < 5)
 #' W2[D2 == 0] <- 5
-#' W <- cbind(rnbinom(N, size = 25,
-#'                    mu = exp(2.5 * U + 0.2 * X)),
+#' W <- cbind(W1 = rnbinom(N, size = 25, mu = exp(2.5 * U + 0.2 * X)),
 #'            W2)
-#' pciah2s(Y = Y, D = D, A = A, X = X,
-#'        W = W, Z = Z, nboot = 100,
+#' pci_result <- pci.ah(Y = Y, D = D, A = A, X = X,
+#'        W = W, Z = Z, variance = TRUE,
 #'        nco_type = c("negbin", "ah"),
 #'        nco_args = list(list(offset = rep(0, N)),
 #'                        list(offset = rep(0, N),
 #'                             event = D2)))
+#' pci_result$summary_first_stage
+#' pci_result$summary_second_stage
+#'
 #' @export
-pciah2s <- function(Y, D, A, X = NULL, W, Z = NULL, Xw = NULL,
+pci.ah <- function(Y, D, A, X = NULL, W, Z = NULL, Xw = NULL,
                     Xy = NULL,
-                    nboot = 2000,
                     nco_type = NULL,
                     nco_args = NULL,
-                    se_method = "all", verbose =F) {
+                    variance = TRUE, verbose = FALSE) {
 
 
 
@@ -65,15 +65,47 @@ pciah2s <- function(Y, D, A, X = NULL, W, Z = NULL, Xw = NULL,
   # clean data type
   Y0 <- as.numeric(Y)
   D0 <- as.numeric(D)
-  W0 <- matrix(as.matrix(W), nrow = length(Y0))
+  W0 <- matrix(as.matrix(as.data.frame(W)), nrow = length(Y0))
   nW <- ncol(W0)
+
+  ## add column names to W if needed
+  if (nW == 1) {
+    colnames(W0) <- "W"
+  } else {
+    if (is.null(colnames(W))) {
+      colnames(W0) <- paste0("W", 1:nW)
+    } else {
+      colnames(W0) <- colnames(as.data.frame(W))
+    }
+  }
+
+
   if (!is.null(X)) {
     X0 <- as.matrix(X)
   } else {
     X0 <- X
   }
 
-  A0 <- as.numeric(A)
+  nX <- ncol(X0)
+  ## add column names to X if needed
+  if (!is.null(X0)) {
+    if (nX == 1) {
+      colnames(X0) <- "X"
+    } else if (nX > 0) {
+      if (is.null(colnames(X))) {
+        colnames(X0) <- paste0("X", 1:nX)
+      } else {
+        colnames(X0) <- colnames(as.data.frame(X))
+      }
+    }
+  }
+
+  A0 <- matrix(as.numeric(A), nrow = nn)
+  if (ncol(A0) == 1){
+  colnames(A0) <- "A"
+  } else {
+    colnames(A0) <- paste0("A", 1:ncol(A0))
+  }
 
   if (is.null(nco_type)) {
     nco_type <- rep("linear", nW)
@@ -96,38 +128,82 @@ pciah2s <- function(Y, D, A, X = NULL, W, Z = NULL, Xw = NULL,
     } else {
       ## Default
       Z0 <- as.matrix(Z)
+
+      nZ <- ncol(Z0)
+      ## add column names to Z if needed
+      if (!is.null(Z0)) {
+        if (nZ == 1) {
+          colnames(Z0) <- "Z"
+        } else if (nZ > 0) {
+          if (is.null(colnames(Z))) {
+            colnames(Z0) <- paste0("Z", 1:nZ)
+          } else {
+            colnames(Z0) <- colnames(as.data.frame(Z))
+          }
+        }
+      }
+
+      paste_int <- function(a1, a2) paste(a1, a2, sep = ":")
+      int_names <- function(names1, names2) c(outer(names1, names2, paste_int))
+      int_mat <- function(a1, a2) {
+        dplyr::bind_cols(apply(a2, 2, function(aa) a1 * aa, simplify = F))
+      }
+
       if (is.null(X0)) {
         Xw0 <- lapply(1:nW, function(i) {  ## if no covariates, design matrix is A, Z and their interaction
           if (nco_type[i] != "ah") {
-            cbind(1, A0, Z0, Z0 * A0)
+            xw <- as.matrix(cbind(1, A0, Z0, int_mat(Z0, A0)))
+            colnames(xw) <- c("(Intercept)", colnames(A0), colnames(Z0),
+                              int_names(colnames(Z0), colnames(A0)))
           } else {
-            cbind(A0, Z0, Z0 * A0)
+            xw <- as.matrix(cbind(A0, Z0, int_mat(Z0, A0)))
+            colnames(xw) <- c(colnames(A0), colnames(Z0), int_names(colnames(Z0), colnames(A0)))
           }
+          return(xw)
         })
       } else {
         Xw0 <- lapply(1:nW, function(i) { ## with covariates, design matrix is A, Z, X and AZ, AX interactions
           if (nco_type[i] != "ah") {
-            cbind(1, A0, X0, Z0, X0 * A0, Z0 * A0)
+            xw <- as.matrix(cbind(1, A0, X0, Z0, int_mat(X0, A0), int_mat(Z0, A0)))
+            colnames(xw) <- c("(Intercept)", colnames(A0), colnames(X0), colnames(Z0),
+                              int_names(colnames(X0), colnames(A0)),
+                              int_names(colnames(Z0), colnames(A0)))
           } else {
-            cbind(A0, X0, Z0, X0 * A0, Z0 * A0)
+            xw <- as.matrix(cbind(A0, X0, Z0, int_mat(X0, A0), int_mat(Z0, A0)))
+            colnames(xw) <- c(colnames(A0), colnames(X0), colnames(Z0),
+                              int_names(colnames(X0), colnames(A0)),
+                              int_names(colnames(Z0), colnames(A0)))
           }
+          return(xw)
         })
       }
     }
   } else {
     if (is.data.frame(Xw) | is.matrix(Xw)) {  ## same design matrix for every NCO
-      Xw0 <- lapply(1:nW, function(i) as.matrix(Xw))
+      Xw0 <- lapply(1:nW, function(i) {
+        xw <- as.matrix(Xw)
+        colnames(xw) <- colnames(Xw)
+        return(xw)
+      })
     } else {
       if (is.list(Xw)) {
-        Xw0 <- lapply(Xw, as.matrix)
+        Xw0 <- lapply(Xw, function(xwi) {
+          xw <- as.matrix(xwi)
+          colnames(xw) <- colnames(xwi)
+        })
       }
     }
   }
 
   if (is.null(Xy)) {
-    Xy0 <- matrix(as.matrix(X), nrow = nn)
+    Xy0 <- X0
   } else {
     Xy0 <- matrix(as.matrix(Xy), nrow = nn)
+    if (ncol(Xy0) == 1)  {
+      colnames(Xy0) <- "X"
+    } else {
+      colnames(Xy0) <- paste0("X", 1:ncol(Xy0))
+    }
   }
 
 
@@ -168,25 +244,26 @@ pciah2s <- function(Y, D, A, X = NULL, W, Z = NULL, Xw = NULL,
 
   # obtain the order of time
   o1 <- dplyr::left_join(data.frame(t1 = t1),
-                  data.frame(t1 = t2, o1 = 1:length(unique(t1))),
-                  by = "t1")$o1
+                         data.frame(t1 = t2, o1 = 1:length(unique(t1))),
+                         by = "t1")$o1
   tmin <- sapply(1:ntime, function(k) min(which(o1 == k)))
 
 
-  W1 <- matrix(W0[Y_order,], nrow = nn)
-  Xw1 <- lapply(Xw0, function(xx) matrix(xx[Y_order,], nrow = nn))
-  Xy1 <- matrix(Xy0[Y_order,], nrow = nn)
-  A1 <- A0[Y_order]
+  W1 <- W0[Y_order, , drop = F]
+  Xw1 <- lapply(Xw0, function(xx) xx[Y_order, , drop = F])
+  Xy1 <- Xy0[Y_order, , drop = F]
+  A1 <- A0[Y_order, , drop = F]
   # fitting the 2SLS model
 
   ## first-stage model: for jth entry of W, fit the corresponding model
   ## record the parameters, estimating equations, Jacobian, and number of
   ## regression coefficients and nuisance parameters (for negative binomial regression)
-  param_1s <- U1j <- J1j <- vector("list", length = nW)
+  W_model <- param_1s <- U1j <- J1j <- vector("list", length = nW)
 
   nparam1_main <- nparam1_nuisance <- rep(NA, nW)
   ## predictor of W
   W_hat <- matrix(nrow = nn, ncol = nW)
+  colnames(W_hat) <- colnames(W1)
   ## in the custom functions, make sure the nuisance parameters are before the regression
   ## coefficients
   for (j in 1:nW) {
@@ -208,57 +285,57 @@ pciah2s <- function(Y, D, A, X = NULL, W, Z = NULL, Xw = NULL,
       init_j <- NA
     }
     if (nco_type[j] == "linear") {
-      W_model <- linear_fit(y = Wj, x = Xwj, offset = offset_j,
-                            variance = T)
+      W_model[[j]] <- linear_fit(y = Wj, x = Xwj, offset = offset_j,
+                                 variance = T)
       ## no nuisance parameter
-      param_1s[[j]] <- W_model$ESTIMATE
-      U1j[[j]] <- W_model$EST_FUNC
-      J1j[[j]] <- W_model$JACOBIAN
-      nparam1_main[j] <- length(W_model$ESTIMATE)
+      param_1s[[j]] <- W_model[[j]]$ESTIMATE
+      U1j[[j]] <- W_model[[j]]$EST_FUNC
+      J1j[[j]] <- W_model[[j]]$JACOBIAN
+      nparam1_main[j] <- length(W_model[[j]]$ESTIMATE)
       nparam1_nuisance[j] <- 0
       W_hat[, j] <- c(Xwj %*% param_1s[[j]])
     } else if (nco_type[j] == "loglin") {
-      W_model <- loglin_fit(y = Wj, x = Xwj, offset = offset_j,
-                            variance = T)
+      W_model[[j]] <- loglin_fit(y = Wj, x = Xwj, offset = offset_j,
+                                 variance = T)
 
       ## no nuisance parameter
-      param_1s[[j]] <- W_model$ESTIMATE
-      U1j[[j]] <- W_model$EST_FUNC
-      J1j[[j]] <- W_model$JACOBIAN
-      nparam1_main[j] <- length(W_model$ESTIMATE)
+      param_1s[[j]] <- W_model[[j]]$ESTIMATE
+      U1j[[j]] <- W_model[[j]]$EST_FUNC
+      J1j[[j]] <- W_model[[j]]$JACOBIAN
+      nparam1_main[j] <- length(W_model[[j]]$ESTIMATE)
       nparam1_nuisance[j] <- 0
       W_hat[, j] <- c(Xwj %*% param_1s[[j]])
     } else if (nco_type[j] == "poisson") {
-      W_model <- poisson_fit(y = Wj, x = Xwj, offset = offset_j,
-                             variance = T)
+      W_model[[j]] <- poisson_fit(y = Wj, x = Xwj, offset = offset_j,
+                                  variance = T)
 
       ## no nuisance parameter
-      param_1s[[j]] <- W_model$ESTIMATE
-      U1j[[j]] <- W_model$EST_FUNC
-      J1j[[j]] <- W_model$JACOBIAN
-      nparam1_main[j] <- length(W_model$ESTIMATE)
+      param_1s[[j]] <- W_model[[j]]$ESTIMATE
+      U1j[[j]] <- W_model[[j]]$EST_FUNC
+      J1j[[j]] <- W_model[[j]]$JACOBIAN
+      nparam1_main[j] <- length(W_model[[j]]$ESTIMATE)
       nparam1_nuisance[j] <- 0
       W_hat[, j] <- c(Xwj %*% param_1s[[j]])
     } else if (nco_type[j] == "ah") {
-      W_model <- lin_ah(time = Wj, event = event_j,
-                        covariates = Xwj, offset = offset_j)
+      W_model[[j]] <- lin_ah(time = Wj, event = event_j,
+                             covariates = Xwj, offset = offset_j)
 
       ## no nuisance parameter
-      param_1s[[j]] <- W_model$ESTIMATE
-      U1j[[j]] <- W_model$EST_FUNC
-      J1j[[j]] <- W_model$JACOBIAN
-      nparam1_main[j] <- length(W_model$ESTIMATE)
+      param_1s[[j]] <- W_model[[j]]$ESTIMATE
+      U1j[[j]] <- W_model[[j]]$EST_FUNC
+      J1j[[j]] <- W_model[[j]]$JACOBIAN
+      nparam1_main[j] <- length(W_model[[j]]$ESTIMATE)
       nparam1_nuisance[j] <- 0
       W_hat[, j] <- c(Xwj %*% param_1s[[j]])
     } else if (nco_type[j] == "negbin") {
-      W_model <- negbin_fit(y = Wj, x = Xwj, offset = offset_j,
-                            variance = T, init = init_j)
+      W_model[[j]] <- negbin_fit(y = Wj, x = Xwj, offset = offset_j,
+                                 variance = T, init = init_j)
 
       ## one nuisance parameter
-      param_1s[[j]] <- W_model$ESTIMATE
-      U1j[[j]] <- W_model$EST_FUNC
-      J1j[[j]] <- W_model$JACOBIAN
-      nparam1_main[j] <- length(W_model$ESTIMATE) - 1
+      param_1s[[j]] <- W_model[[j]]$ESTIMATE
+      U1j[[j]] <- W_model[[j]]$EST_FUNC
+      J1j[[j]] <- W_model[[j]]$JACOBIAN
+      nparam1_main[j] <- length(W_model[[j]]$ESTIMATE) - 1
       nparam1_nuisance[j] <- 1
       W_hat[, j] <- c(Xwj %*% param_1s[[j]][-1])
     }
@@ -273,9 +350,9 @@ pciah2s <- function(Y, D, A, X = NULL, W, Z = NULL, Xw = NULL,
 
   params <- as.numeric(c(unlist(param_1s), param_2s))
 
-  if (se_method %in% c("all", "analytic", "gaussian multiplier")) {
+  if (variance) {
 
-    np_s2 <- 1 + nW + ncol(Xy1) ## number of parameters in the second stage model
+    np_s2 <- ncol(A1) + nW + ncol(Xy1) ## number of parameters in the second stage model
     par_W <- tail(params, nW)  ## parameters associated with W_hat
 
     U1 <- suppressMessages(as.matrix(dplyr::bind_cols(U1j)))
@@ -382,9 +459,9 @@ pciah2s <- function(Y, D, A, X = NULL, W, Z = NULL, Xw = NULL,
 
     ## Jacobian for every individual
     for (i in 1:nn) {
-      dS2_i <- rbind(matrix(0, nrow = 1 + ncol(Xy1), ncol = sum(nparam1_main)),
+      dS2_i <- rbind(matrix(0, nrow = ncol(A1) + ncol(Xy1), ncol = sum(nparam1_main)),
                      dW_i[, , i])
-      dbS2_Ti <- rbind(matrix(0, nrow = 1 + ncol(Xy1), ncol = sum(nparam1_main)),
+      dbS2_Ti <- rbind(matrix(0, nrow = ncol(A1) + ncol(Xy1), ncol = sum(nparam1_main)),
                        dbW_Tk[, , o1[i]])
 
       J21_i1 <- dS2_i * (d1[i] - cumhaz[o1[i]] - c(param_2s %*% S2[i, ]) * t1[i])
@@ -393,13 +470,13 @@ pciah2s <- function(Y, D, A, X = NULL, W, Z = NULL, Xw = NULL,
 
       J21_i3 <- d1[i] * dbS2_Ti
 
-      J21_i4 <- rbind(matrix(0, nrow = 1 + ncol(Xy1), ncol = sum(nparam1_main)),
+      J21_i4 <- rbind(matrix(0, nrow = ncol(A1) + ncol(Xy1), ncol = sum(nparam1_main)),
                       int_dW_haz[, , o1[i]])
 
       J21_i5 <- int_Zb_dhaz[, , o1[i]]
       J21_i6 <- int_Zb_Tk[o1[i], ] %*% t(par_W) %*% dW_i[, , i]
       J21_i7 <- c(param_2s %*% S2[i, ]) *
-        rbind(matrix(0, nrow = 1 + ncol(Xy1), ncol = sum(nparam1_main)),
+        rbind(matrix(0, nrow = ncol(A1) + ncol(Xy1), ncol = sum(nparam1_main)),
               int_dbW_Tk[, , o1[i]])
 
       J21_i[, , i] <- J21_i1 + J21_i2 - J21_i3 + J21_i4 + J21_i5 + J21_i6 +
@@ -427,65 +504,38 @@ pciah2s <- function(Y, D, A, X = NULL, W, Z = NULL, Xw = NULL,
     JJ <- rbind(cbind(J11, J12), cbind(J21, J22))
 
     if (verbose) {
-        dout  <- svd(JJ)$d
-        print(sprintf('Condition number of the Fisher information matrix is %1.1e', dout[1]/dout[length(dout)]))
+      dout  <- svd(JJ)$d
+      print(sprintf('Condition number of the Fisher information matrix is %1.1e', dout[1] / dout[length(dout)]))
     }
     Jinv <- solve(JJ)
-  }
 
-
-
-  ## parameter of interests are regression coefficients in the second stage
-  ## model
-  if (se_method %in% c("all", "analytic")) {
     DD <- t(U) %*% U
 
-    VAR_analytic <- Jinv %*% DD %*% t(Jinv)
-    SE_analytic <- tail(sqrt(diag(VAR_analytic)), np_s2)
+    VAR <- Jinv %*% DD %*% t(Jinv)
+    all_se <- sqrt(diag(VAR))
+    se_2s <- tail(sqrt(diag(VAR)), np_s2)
+
+    summ_main <- matrix(NA, nrow = length(param_2s), ncol = 4)
+    summ_main[, 1] <- param_2s
+    summ_main[, 2] <- se_2s
+    summ_main[, 3] <- param_2s / se_2s
+    summ_main[, 4] <- pchisq((param_2s / se_2s) ^ 2, df = 1, lower.tail = F)
+
+    colnames(summ_main) <- c("Estimate", "Std. Error", "z value",
+                             "Pr(>|z|)")
+    rownames(summ_main) <- c(colnames(A1), colnames(Xy1), colnames(W_hat))
+    summ_nuisance <- lapply(W_model, function(x) x$summary)
+    if (nW > 1) names(summ_nuisance) <- paste0("W", 1:nW)
+
+    return(list(ESTIMATE = param_2s,
+                SE = se_2s,
+                summary_first_stage = summ_nuisance,
+                summary_second_stage = summ_main))
   }
-
-  if (se_method %in% c("all", "gaussian multiplier")) {
-    IF <- nn * (U %*% t(Jinv))
-
-    est_boot <- matrix(nrow = nboot,
-                       ncol = sum(nparam1_main) + sum(nparam1_nuisance) + np_s2)
-    for (b in 1:nboot) {
-      est_boot[b, ] <- colMeans(IF * rnorm(nn))
-    }
-
-    SE_gaussian_multiplier <- tail(apply(est_boot, 2, sd), np_s2)
-  }
-
-  if (se_method %in% c("all", "exponential multiplier")) {
-    est_boot <- matrix(nrow = nboot, ncol = np_s2)
-
-    for (b in 1:nboot) {
-      est_boot[b, ] <- lin_ah(time = Y, event = D,
-                              covariates = S2,
-                              weights = rexp(nn), variance = FALSE)$ESTIMATE
-    }
-
-    SE_exponential_multiplier <- apply(est_boot, 2, sd) ## 0.5864
-  }
-
-  if (se_method == "all") {
-    SE <- rbind(SE_analytic, SE_gaussian_multiplier, SE_exponential_multiplier)
-    rownames(SE) <- c("analytic", "gaussian multiplier",
-                      "exponential multiplier")
-  } else if (se_method == "analytic") {
-    SE <- SE_analytic
-  } else if (se_method == "gaussian multiplier") {
-    SE <- SE_gaussian_multiplier
-  } else if (se_method == "exponential multiplier") {
-    SE <- SE_exponential_multiplier
-  } else if (se_method == "none") {
-    SE <- NULL
-  }
-  names(param_2s)  <-  c( 'A', sprintf('X%d', 1:ncol(Xy0)), sprintf('W%d', 1:ncol(W_hat)))
 
   return(list(ESTIMATE = param_2s,
-              SE = SE,
               PARAM = unlist(c(param_1s, param_2s))))
+
 }
 
 

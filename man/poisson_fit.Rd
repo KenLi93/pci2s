@@ -23,4 +23,14 @@ poisson_fit(
 }
 \description{
 Fit Poisson regression model Y | X ~ Poisson(exp(offset + beta * x))
+This is a utility function. For formal Poisson regression models,
+the glm function is recommended
+}
+\examples{
+x <- cbind(1, rep(1:3, each = 10))
+tt <- rep(1:2, 15)
+y <- rpois(30, lambda = tt * exp(x[, 1] + 0.5 * x[, 2]))
+
+poisreg_result <- poisson_fit(y, x, offset = log(tt))
+poisreg_result$summary
 }

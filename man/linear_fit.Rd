@@ -18,3 +18,10 @@ linear_fit(y, x, offset = rep(0, length(y)), variance = TRUE)
 \description{
 Fit linear model E[Y | X] = offset + beta * x
 }
+\examples{
+x <- rep(1:3, each = 10)
+y <- rnorm(30, 5 + 2 * x, 1)
+
+lm_result <- linear_fit(y, cbind(1, x))
+lm_result$summary
+}
