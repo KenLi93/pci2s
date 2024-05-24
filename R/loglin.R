@@ -252,7 +252,7 @@ negbin_fit <- function(y, x, offset = rep(0, length(y)),
   if (length(init) == 1 && is.na(init)) {
     ## initial value: by log-linear model
     ## Use the MASS::glm.nb function
-    nb_model <- MASS::glm.nb(y ~ 0 + x + stats::offset(offset))
+    nb_model <- MASS::glm.nb(y ~ 0 + x + offset(offset))
     beta_init <- nb_model$coefficients[1:ncol(x)]
     thet_init <- nb_model$theta
 

@@ -190,6 +190,7 @@ pci.ah <- function(Y, D, A, X = NULL, W, Z = NULL, Xw = NULL,
         Xw0 <- lapply(Xw, function(xwi) {
           xw <- as.matrix(xwi)
           colnames(xw) <- colnames(xwi)
+          return(xw)
         })
       }
     }

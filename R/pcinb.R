@@ -188,6 +188,7 @@ pci.negbin <- function(Y, offset = rep(0, length(Y)),
         Xw0 <- lapply(Xw, function(xwi) {
           xw <- as.matrix(xwi)
           colnames(xw) <- colnames(xwi)
+          xw
         })
       }
     }
@@ -236,7 +237,7 @@ pci.negbin <- function(Y, offset = rep(0, length(Y)),
   nparam1_main <- nparam1_nuisance <- rep(NA, nW)
   ## predictor of W
   W_hat <- matrix(nrow = nn, ncol = nW)
-  colnames(W_hat) <- colnames(W1)
+  colnames(W_hat) <- colnames(W)
   ## in the custom functions, make sure the nuisance parameters are before the regression
   ## coefficients
   for (j in 1:nW) {
@@ -319,6 +320,7 @@ pci.negbin <- function(Y, offset = rep(0, length(Y)),
   negbin_result <- negbin_fit(y = Y0, x = cbind(1, A0, Xy0, W_hat),
                               init = nb_init, offset = eta0)
   param_2s <- negbin_result$ESTIMATE
+  names(param_2s)  <- c("size", "(Intercept)", colnames(A0) , colnames(Xy0) , colnames(W_hat))
   param_2_theta <- param_2s[1] ## size parameter of the negative binomial regression
   param_2_beta <- param_2s[-1] ## regression coefficients
   params <- as.numeric(c(unlist(param_1s), param_2s))
@@ -428,7 +430,8 @@ pci.negbin <- function(Y, offset = rep(0, length(Y)),
 
     colnames(summ_main) <- c("Estimate", "Std. Error", "z value",
                              "Pr(>|z|)")
-    rownames(summ_main) <- c("size", "(Intercept)", colnames(A1), colnames(Xy1), colnames(W_hat))
+    # browser()
+     rownames(summ_main) <- c("size", "(Intercept)", colnames(A0) , colnames(Xy0) , colnames(W_hat))
     summ_nuisance <- lapply(W_model, function(x) x$summary)
     if (nW > 1) names(summ_nuisance) <- paste0("W", 1:nW)
 
