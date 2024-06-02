@@ -54,7 +54,7 @@ pci.logitreg <- function(Y, offset = rep(0, length(Y)),
                        nco_offset = rep(0, length(Y)),
                        variance = TRUE) {
 
-
+  expit <- function(x) exp(x) / (1 + exp(x))
 
   nn <- length(Y)
 
