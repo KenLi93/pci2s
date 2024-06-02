@@ -1,4 +1,4 @@
-#' Proximal causal inference with count outcomes using two-stage-least-square
+#' Proximal Two-stage-least-squares with count outcomes
 #'
 #' This function computes the adjusted rate ratio using log-linear regression model,
 #' using a pair of negative control variable
@@ -41,16 +41,16 @@
 #' W <- cbind(W1 = rnbinom(N, size = 25,
 #'                    mu = exp(2.5 * U + 0.2 * X)),
 #'            W2)
-#' pci_result <- pci.loglin(Y = Y, A = A, X = X,
+#' p2sls_result <- p2sls.loglin(Y = Y, A = A, X = X,
 #'        W = W, Z = Z,
 #'        nco_type = c("negbin", "ah"),
 #'        nco_args = list(list(offset = rep(0, N)),
 #'                        list(offset = rep(0, N),
 #'                             event = D2)))
-#' pci_result$summary_first_stage
-#' pci_result$summary_second_stage
+#' p2sls_result$summary_first_stage
+#' p2sls_result$summary_second_stage
 #' @export
-pci.loglin <- function(Y, offset = rep(0, length(Y)),
+p2sls.loglin <- function(Y, offset = rep(0, length(Y)),
                        A, X = NULL, W, Z = NULL, Xw = NULL,
                        Xy = NULL,
                        nco_type = NULL,

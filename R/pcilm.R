@@ -1,4 +1,4 @@
-#' Proximal causal inference with linear models using two-stage-least-square
+#' Proximal Two-stage-least-squares with linear models
 #'
 #' This function implements the linear regression model, adjusting for potential unmeasured
 #' using a pair of negative control variable
@@ -41,16 +41,16 @@
 #' W <- cbind(W1 = rnbinom(N, size = 25,
 #'                    mu = exp(2.5 * U + 0.2 * X)),
 #'            W2)
-#' pci_result <- pci.lm(Y = Y, A = A, X = X,
+#' p2sls_result <- p2sls.lm(Y = Y, A = A, X = X,
 #'        W = W, Z = Z,
 #'        nco_type = c("negbin", "ah"),
 #'        nco_args = list(list(offset = rep(0, N)),
 #'                        list(offset = rep(0, N),
 #'                             event = D2)))
-#' pci_result$summary_first_stage
-#' pci_result$summary_second_stage
+#' p2sls_result$summary_first_stage
+#' p2sls_result$summary_second_stage
 #' @export
-pci.lm <- function(Y, offset = rep(0, length(Y)),
+p2sls.lm <- function(Y, offset = rep(0, length(Y)),
                    A, X = NULL, W, Z = NULL, Xw = NULL,
                    Xy = NULL,
                    nco_type = NULL,

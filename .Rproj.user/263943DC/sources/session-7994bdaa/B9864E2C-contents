@@ -1,4 +1,4 @@
-#' Proximal causal inference with categorical outcomes using two-stage-least-square
+#' Proximal Two-stage-least-squares with categorical outcomes using
 #'
 #' This function computes the adjusted odds ratio using multiple logistic regression model,
 #' using a pair of negative control variable
@@ -42,12 +42,12 @@
 #' }
 #' Z <- rnorm(N, 2 * U + 0.5 * X)
 #'
-#' pci_result <- pci.logitreg(Y = Y, A = A, X = X,
+#' p2sls_result <- p2sls.logitreg(Y = Y, A = A, X = X,
 #'        W = W, Z = Z)
-#' pci_result$summary_first_stage
-#' pci_result$summary_second_stage
+#' p2sls_result$summary_first_stage
+#' p2sls_result$summary_second_stage
 #' @export
-pci.logitreg <- function(Y, offset = rep(0, length(Y)),
+p2sls.logitreg <- function(Y, offset = rep(0, length(Y)),
                        A, X = NULL, W, Z = NULL, Xw = NULL,
                        Xw_Y0 = NULL,
                        Xy = NULL,
