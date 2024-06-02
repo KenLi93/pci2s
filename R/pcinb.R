@@ -51,12 +51,12 @@
 #' pci_result$summary_second_stage
 #' @export
 pci.negbin <- function(Y, offset = rep(0, length(Y)),
-                    A, X = NULL, W, Z = NULL, Xw = NULL,
-                    Xy = NULL,
-                    nco_type = NULL,
-                    nco_args = NULL,
-                    nb_init = NA,
-                    variance = TRUE, verbose = F) {
+                       A, X = NULL, W, Z = NULL, Xw = NULL,
+                       Xy = NULL,
+                       nco_type = NULL,
+                       nco_args = NULL,
+                       nb_init = NA,
+                       variance = TRUE, verbose = F) {
 
 
 
@@ -237,7 +237,7 @@ pci.negbin <- function(Y, offset = rep(0, length(Y)),
   nparam1_main <- nparam1_nuisance <- rep(NA, nW)
   ## predictor of W
   W_hat <- matrix(nrow = nn, ncol = nW)
-  colnames(W_hat) <- colnames(W)
+  colnames(W_hat) <- colnames(W0)
   ## in the custom functions, make sure the nuisance parameters are before the regression
   ## coefficients
   for (j in 1:nW) {
@@ -259,7 +259,7 @@ pci.negbin <- function(Y, offset = rep(0, length(Y)),
 
     if (nco_type[j] == "linear") {
       W_model[[j]] <- linear_fit(y = Wj, x = Xwj, offset = offset_j,
-                            variance = T)
+                                 variance = T)
       ## no nuisance parameter
       param_1s[[j]] <- W_model[[j]]$ESTIMATE
       U1j[[j]] <- W_model[[j]]$EST_FUNC
@@ -269,7 +269,7 @@ pci.negbin <- function(Y, offset = rep(0, length(Y)),
       W_hat[, j] <- c(Xwj %*% param_1s[[j]])
     } else if (nco_type[j] == "loglin") {
       W_model[[j]] <- loglin_fit(y = Wj, x = Xwj, offset = offset_j,
-                            variance = T)
+                                 variance = T)
 
       ## no nuisance parameter
       param_1s[[j]] <- W_model[[j]]$ESTIMATE
@@ -280,7 +280,7 @@ pci.negbin <- function(Y, offset = rep(0, length(Y)),
       W_hat[, j] <- c(Xwj %*% param_1s[[j]])
     } else if (nco_type[j] == "poisson") {
       W_model[[j]] <- poisson_fit(y = Wj, x = Xwj, offset = offset_j,
-                             variance = T)
+                                  variance = T)
 
       ## no nuisance parameter
       param_1s[[j]] <- W_model[[j]]$ESTIMATE
@@ -291,7 +291,7 @@ pci.negbin <- function(Y, offset = rep(0, length(Y)),
       W_hat[, j] <- c(Xwj %*% param_1s[[j]])
     } else if (nco_type[j] == "ah") {
       W_model[[j]] <- lin_ah(time = Wj, event = event_j,
-                        covariates = Xwj, offset = offset_j)
+                             covariates = Xwj, offset = offset_j)
 
       ## no nuisance parameter
       param_1s[[j]] <- W_model[[j]]$ESTIMATE
@@ -302,7 +302,7 @@ pci.negbin <- function(Y, offset = rep(0, length(Y)),
       W_hat[, j] <- c(Xwj %*% param_1s[[j]])
     } else if (nco_type[j] == "negbin") {
       W_model[[j]] <- negbin_fit(y = Wj, x = Xwj, offset = offset_j,
-                            variance = T, init = init_j)
+                                 variance = T, init = init_j)
 
       ## one nuisance parameter
       param_1s[[j]] <- W_model[[j]]$ESTIMATE
@@ -327,11 +327,11 @@ pci.negbin <- function(Y, offset = rep(0, length(Y)),
 
 
   if (verbose) {
-      # The number of stage 1 parameters is only correct for when stage 1 is negative binomial and additive hazard models
-      negbin.stage1.nparam  <-  (1 + 1 + ncol(A0) + ncol(X0) + ncol(Z0) + ncol(A0) * ncol(X0) + ncol(A0) * ncol(Z0))*sum(nco_type == 'negbin') # Each negbin has 1 nuisance + intercept + A + X + Z + AX + AZ
-      ah.stage1.nparam  <- (ncol(A0) + ncol(X0) + ncol(Z0) +  ncol(A0) * ncol(X0) + ncol(A0) * ncol(Z0)) * sum(nco_type == 'ah')  # Each ah has  A + X + Z + AX + AZ (no intercept)
-      stage2.nparam  <- (2 + ncol(A0) + ncol(Xy0) + ncol(W_hat)) # nuisance + intercept + A + X + W_hat
-      print(sprintf('Number of params: Negbin stage 1: %d, AH stage 1: %d, stage2: %d, total: %d, check: %d', negbin.stage1.nparam, ah.stage1.nparam, stage2.nparam, negbin.stage1.nparam+ah.stage1.nparam+stage2.nparam, length(params)))
+    # The number of stage 1 parameters is only correct for when stage 1 is negative binomial and additive hazard models
+    negbin.stage1.nparam  <-  (1 + 1 + ncol(A0) + ncol(X0) + ncol(Z0) + ncol(A0) * ncol(X0) + ncol(A0) * ncol(Z0))*sum(nco_type == 'negbin') # Each negbin has 1 nuisance + intercept + A + X + Z + AX + AZ
+    ah.stage1.nparam  <- (ncol(A0) + ncol(X0) + ncol(Z0) +  ncol(A0) * ncol(X0) + ncol(A0) * ncol(Z0)) * sum(nco_type == 'ah')  # Each ah has  A + X + Z + AX + AZ (no intercept)
+    stage2.nparam  <- (2 + ncol(A0) + ncol(Xy0) + ncol(W_hat)) # nuisance + intercept + A + X + W_hat
+    print(sprintf('Number of params: Negbin stage 1: %d, AH stage 1: %d, stage2: %d, total: %d, check: %d', negbin.stage1.nparam, ah.stage1.nparam, stage2.nparam, negbin.stage1.nparam+ah.stage1.nparam+stage2.nparam, length(params)))
   }
 
 
@@ -372,9 +372,9 @@ pci.negbin <- function(Y, offset = rep(0, length(Y)),
       dS2_i <- rbind(matrix(0, nrow = 1 + ncol(A0) + ncol(Xy0), ncol = sum(nparam1_main)),
                      dW_i[, , i])
       mu_i <- exp(eta0[i] + c(S2[i, ] %*% param_2_beta))
-        # if (mu_i > 100){
-        #       print(sprintf('%d, %.0e',i, mu_i))
-    # }
+      # if (mu_i > 100){
+      #       print(sprintf('%d, %.0e',i, mu_i))
+      # }
       J21_i1 <- (param_2_theta + mu_i) / param_2_theta * mu_i *
         t(param_2_beta) %*% dS2_i +
         (param_2_theta + Y0[i]) / (param_2_theta + mu_i) ^ 2 * mu_i *
@@ -409,8 +409,8 @@ pci.negbin <- function(Y, offset = rep(0, length(Y)),
 
     JJ <- rbind(cbind(J11, J12), cbind(J21, J22))
     if (verbose) {
-        dout  <- svd(JJ)$d
-        print(sprintf('Condition number of the Fisher information matrix is %1.1e', dout[1]/dout[length(dout)]))
+      dout  <- svd(JJ)$d
+      print(sprintf('Condition number of the Fisher information matrix is %1.1e', dout[1]/dout[length(dout)]))
     }
 
     Jinv <- solve(JJ)
@@ -431,7 +431,7 @@ pci.negbin <- function(Y, offset = rep(0, length(Y)),
     colnames(summ_main) <- c("Estimate", "Std. Error", "z value",
                              "Pr(>|z|)")
     # browser()
-     rownames(summ_main) <- c("size", "(Intercept)", colnames(A0) , colnames(Xy0) , colnames(W_hat))
+    rownames(summ_main) <- c("size", "(Intercept)", colnames(A0) , colnames(Xy0) , colnames(W_hat))
     summ_nuisance <- lapply(W_model, function(x) x$summary)
     if (nW > 1) names(summ_nuisance) <- paste0("W", 1:nW)
 

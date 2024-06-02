@@ -3,9 +3,9 @@
     "path": "C:/Users/kli/OneDrive - St. Jude Children's Research Hospital/GIthub/pci2s/R/loglin.R",
     "project_path": "R/loglin.R",
     "type": "r_source",
-    "hash": "2486371683",
+    "hash": "3124553702",
     "contents": "",
-    "dirty": false,
+    "dirty": true,
     "created": 1702332864107.0,
     "source_on_save": false,
     "relative_order": 3,
@@ -16,11 +16,11 @@
         "scrollLine": "0"
     },
     "folds": "",
-    "lastKnownWriteTime": 1714510645,
+    "lastKnownWriteTime": 1716582923,
     "encoding": "UTF-8",
     "collab_server": "",
     "source_window": "",
-    "last_content_update": 1714510645808,
+    "last_content_update": 1716583204409,
     "read_only": false,
     "read_only_alternatives": []
 }

@@ -235,7 +235,7 @@ pci.lm <- function(Y, offset = rep(0, length(Y)),
   nparam1_main <- nparam1_nuisance <- rep(NA, nW)
   ## predictor of W
   W_hat <- matrix(nrow = nn, ncol = nW)
-  colnames(W_hat) <- colnames(W1)
+  colnames(W_hat) <- colnames(W0)
   ## in the custom functions, make sure the nuisance parameters are before the regression
   ## coefficients
   for (j in 1:nW) {
@@ -411,7 +411,7 @@ pci.lm <- function(Y, offset = rep(0, length(Y)),
 
     colnames(summ_main) <- c("Estimate", "Std. Error", "z value",
                              "Pr(>|z|)")
-    rownames(summ_main) <- c("(Intercept)", colnames(A1), colnames(Xy1), colnames(W_hat))
+    rownames(summ_main) <- c("(Intercept)", colnames(A0), colnames(Xy0), colnames(W_hat))
     summ_nuisance <- lapply(W_model, function(x) x$summary)
     if (nW > 1) names(summ_nuisance) <- paste0("W", 1:nW)
 
