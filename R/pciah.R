@@ -460,9 +460,9 @@ pci.ah <- function(Y, D, A, X = NULL, W, Z = NULL, Xw = NULL,
 
     ## Jacobian for every individual
     for (i in 1:nn) {
-      dS2_i <- rbind(matrix(0, nrow = ncol(A1) + ncol(Xy1), ncol = sum(nparam1_main)),
+      dS2_i <- rbind(matrix(0, nrow = ifelse(is.null(Xy1), ncol(A1), ncol(A1) + ncol(Xy1)), ncol = sum(nparam1_main)),
                      dW_i[, , i])
-      dbS2_Ti <- rbind(matrix(0, nrow = ncol(A1) + ncol(Xy1), ncol = sum(nparam1_main)),
+      dbS2_Ti <- rbind(matrix(0, nrow = ifelse(is.null(Xy1), ncol(A1), ncol(A1) + ncol(Xy1)), ncol = sum(nparam1_main)),
                        dbW_Tk[, , o1[i]])
 
       J21_i1 <- dS2_i * (d1[i] - cumhaz[o1[i]] - c(param_2s %*% S2[i, ]) * t1[i])
@@ -471,13 +471,13 @@ pci.ah <- function(Y, D, A, X = NULL, W, Z = NULL, Xw = NULL,
 
       J21_i3 <- d1[i] * dbS2_Ti
 
-      J21_i4 <- rbind(matrix(0, nrow = ncol(A1) + ncol(Xy1), ncol = sum(nparam1_main)),
+      J21_i4 <- rbind(matrix(0, nrow = ifelse(is.null(Xy1), ncol(A1), ncol(A1) + ncol(Xy1)), ncol = sum(nparam1_main)),
                       int_dW_haz[, , o1[i]])
 
       J21_i5 <- int_Zb_dhaz[, , o1[i]]
       J21_i6 <- int_Zb_Tk[o1[i], ] %*% t(par_W) %*% dW_i[, , i]
       J21_i7 <- c(param_2s %*% S2[i, ]) *
-        rbind(matrix(0, nrow = ncol(A1) + ncol(Xy1), ncol = sum(nparam1_main)),
+        rbind(matrix(0, nrow = ifelse(is.null(Xy1), ncol(A1), ncol(A1) + ncol(Xy1)), ncol = sum(nparam1_main)),
               int_dbW_Tk[, , o1[i]])
 
       J21_i[, , i] <- J21_i1 + J21_i2 - J21_i3 + J21_i4 + J21_i5 + J21_i6 +
