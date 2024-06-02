@@ -1,9 +1,9 @@
-#' Proximal causal inference with count outcomes using two-stage-least-square
+#' Proximal causal inference with linear models using two-stage-least-square
 #'
-#' This function computes the adjusted rate ratio using log-linear regression model,
+#' This function implements the linear regression model, adjusting for potential unmeasured
 #' using a pair of negative control variable
 #'
-#' @param Y an n-vector of count outcomes
+#' @param Y an n-vector of outcomes
 #' @param offset an n-vector of offset for Y
 #' @param A an n-vector of primary exposure
 #' @param X an n * nX matrix of adjusted covariates , can be empty
@@ -33,7 +33,7 @@
 #' expit  <-  function(x) exp(x)/(1 + exp(x))
 #' U <- runif(N); X <- runif(N)
 #' A <- rbinom(N, 1, expit(-3 + 5 * U + 1 * X))
-#' Y <- rpois(N, exp(0.2 + 1.5 * U + 0.2 * X + 0.2 * A))
+#' Y <- rnorm(N, 0.2 + 1.5 * U + 0.2 * X + 0.2 * A, 0.5)
 #' Z <- rnorm(N, 2 * U + 0.5 * X)
 #' W2 <- rexp(N, 0.1 + 1 * U + 0.1 * X)
 #' D2 <- as.numeric(W2 < 5)
@@ -41,7 +41,7 @@
 #' W <- cbind(W1 = rnbinom(N, size = 25,
 #'                    mu = exp(2.5 * U + 0.2 * X)),
 #'            W2)
-#' pci_result <- pci.loglin(Y = Y, A = A, X = X,
+#' pci_result <- pci.lm(Y = Y, A = A, X = X,
 #'        W = W, Z = Z,
 #'        nco_type = c("negbin", "ah"),
 #'        nco_args = list(list(offset = rep(0, N)),
@@ -50,12 +50,12 @@
 #' pci_result$summary_first_stage
 #' pci_result$summary_second_stage
 #' @export
-pci.loglin <- function(Y, offset = rep(0, length(Y)),
-                       A, X = NULL, W, Z = NULL, Xw = NULL,
-                       Xy = NULL,
-                       nco_type = NULL,
-                       nco_args = NULL,
-                       variance = TRUE, verbose = F) {
+pci.lm <- function(Y, offset = rep(0, length(Y)),
+                   A, X = NULL, W, Z = NULL, Xw = NULL,
+                   Xy = NULL,
+                   nco_type = NULL,
+                   nco_args = NULL,
+                   variance = TRUE, verbose = F) {
 
 
 
@@ -83,7 +83,7 @@ pci.loglin <- function(Y, offset = rep(0, length(Y)),
     X0 <- X
   }
 
-  nX <- ncol(X0)
+  nX <- ifelse(is.null(X0), 0, ncol(X0))
   ## add column names to X if needed
   if (!is.null(X0)) {
     if (nX == 1) {
@@ -315,8 +315,8 @@ pci.loglin <- function(Y, offset = rep(0, length(Y)),
 
   ## second-stage model: fit the additive hazards model with the outcome against A, X and
   ## predictors of W
-  loglin_result <- loglin_fit(y = Y0, x = cbind(1, A0, Xy0, W_hat), offset = eta0)
-  param_2s <- loglin_result$ESTIMATE
+  lm_result <- linear_fit(y = Y0, x = cbind(1, A0, Xy0, W_hat), offset = eta0)
+  param_2s <- lm_result$ESTIMATE
   params <- as.numeric(c(unlist(param_1s), param_2s))
 
 
@@ -339,7 +339,7 @@ pci.loglin <- function(Y, offset = rep(0, length(Y)),
 
 
 
-    U2 <- loglin_result$EST_FUNC # make predictors of W
+    U2 <- lm_result$EST_FUNC # make predictors of W
 
 
     U <- cbind(U1, U2)
@@ -363,11 +363,13 @@ pci.loglin <- function(Y, offset = rep(0, length(Y)),
     }
     ## Jacobian for every individual
     for (i in 1:nn) {
-      dS2_i <- rbind(matrix(0, nrow = 1 + ncol(A0) + ncol(Xy0), ncol = sum(nparam1_main)),
+      dS2_i <- rbind(matrix(0, nrow = ifelse(is.null(Xy0), 1 + ncol(A0),
+                                             1 + ncol(A0) + ncol(Xy0)),
+                            ncol = sum(nparam1_main)),
                      dW_i[, , i])
-      mu_i <- exp(eta0[i] + c(S2[i, ] %*% param_2s))
+      mu_i <- eta0[i] + c(S2[i, ] %*% param_2s)
 
-      J21_i[, , i] <- dS2_i * (Y0[i] - mu_i) - c(S2[i, ]) %*% t(param_2s) %*% dS2_i * mu_i
+      J21_i[, , i] <- dS2_i * (Y0[i] - mu_i) - c(S2[i, ]) %*% t(param_2s) %*% dS2_i
     }
 
     J21_main <- apply(J21_i, c(1, 2), sum)
@@ -386,7 +388,7 @@ pci.loglin <- function(Y, offset = rep(0, length(Y)),
     ## average derivative matrix among the at-risk at each time point
 
 
-    J22 <- loglin_result$JACOBIAN
+    J22 <- lm_result$JACOBIAN
 
     JJ <- rbind(cbind(J11, J12), cbind(J21, J22))
     if (verbose) {

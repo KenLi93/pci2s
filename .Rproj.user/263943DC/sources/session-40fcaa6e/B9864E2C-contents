@@ -314,8 +314,10 @@ pci.logitreg <- function(Y, offset = rep(0, length(Y)),
       }
       ## Jacobian for every individual
       for (i in 1:nn) {
-        dS2_i <- rbind(matrix(0, nrow = 1 + ncol(A0) + ncol(Xy0[[k]]) + ncol(W0), ncol = sum(nparam1_main)),
-                       dW_i[, , i])
+        dS2_i <- dS2_i <- rbind(matrix(0, nrow = ifelse(is.null(Xy0[[k]]), 1 + ncol(A0),
+                                                        1 + ncol(A0) + ncol(Xy0[[k]])),
+                                       ncol = sum(nparam1_main)),
+                                dW_i[, , i])
         mu_i <- expit(eta0[i] + c(S2[i, ] %*% param_2s))
 
         J21_i[, , i] <- dS2_i * (Y0[i] - mu_i) -

@@ -83,7 +83,7 @@ pci.lm <- function(Y, offset = rep(0, length(Y)),
     X0 <- X
   }
 
-  nX <- ncol(X0)
+  nX <- ifelse(is.null(X0), 0, ncol(X0))
   ## add column names to X if needed
   if (!is.null(X0)) {
     if (nX == 1) {
@@ -363,7 +363,9 @@ pci.lm <- function(Y, offset = rep(0, length(Y)),
     }
     ## Jacobian for every individual
     for (i in 1:nn) {
-      dS2_i <- rbind(matrix(0, nrow = 1 + ncol(A0) + ncol(Xy0), ncol = sum(nparam1_main)),
+      dS2_i <- rbind(matrix(0, nrow = ifelse(is.null(Xy0), 1 + ncol(A0),
+                                             1 + ncol(A0) + ncol(Xy0)),
+                            ncol = sum(nparam1_main)),
                      dW_i[, , i])
       mu_i <- eta0[i] + c(S2[i, ] %*% param_2s)
 
