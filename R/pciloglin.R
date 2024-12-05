@@ -187,6 +187,7 @@ p2sls.loglin <- function(Y, offset = rep(0, length(Y)),
         Xw0 <- lapply(Xw, function(xwi) {
           xw <- as.matrix(xwi)
           colnames(xw) <- colnames(xwi)
+          return(xw)
         })
       }
     }
