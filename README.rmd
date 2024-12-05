@@ -8,18 +8,15 @@ output: github_document
 knitr::opts_chunk$set(
   collapse = TRUE,
   comment = "#>",
-  fig.path = "man/figures/README-",
   out.width = "100%"
 )
 ```
 
-# usethis <a href="https://usethis.r-lib.org"><img src="man/figures/logo.png" align="right" height="138" alt="usethis website" /></a>
+# pci2s: Regression-based proximal causal inference using two-stage-least-squares
 
 <!-- badges: start -->
 [![R-CMD-check](https://github.com/r-lib/usethis/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/r-lib/usethis/actions/workflows/R-CMD-check.yaml)
-[![CRAN status](https://www.r-pkg.org/badges/version/usethis)](https://CRAN.R-project.org/package=usethis)
 [![Lifecycle: stable](https://img.shields.io/badge/lifecycle-stable-brightgreen.svg)](https://lifecycle.r-lib.org/articles/stages.html#stable)
-[![Codecov test coverage](https://codecov.io/gh/r-lib/usethis/graph/badge.svg)](https://app.codecov.io/gh/r-lib/usethis)
 <!-- badges: end -->
 
 usethis is a workflow package: it automates repetitive tasks that arise during project setup and development, both for R packages and non-package projects.
