@@ -19,7 +19,9 @@ knitr::opts_chunk$set(
 [![Lifecycle: stable](https://img.shields.io/badge/lifecycle-stable-brightgreen.svg)](https://lifecycle.r-lib.org/articles/stages.html#stable)
 <!-- badges: end -->
 
-We provide estimation and inference for regression-based proximal causal inference with a variety data types of outcome variables and negative control outcomes. Details can be found at Liu et al. ([2024](#ref-p2sls-glm)) and Li et al. ([2024](#ref-p2sls-ah)) An introduction of proximal causal inference can be found at Shi et al. ([2020](#ref-review)) and Tchetgen Tchetgen ([2024](#ref-intro)). 
+We provide estimation and inference for regression-based proximal causal inference with a variety data types of outcome variables and negative control outcomes. The supported models for the distribution of the outcome variables include linear regression model (`p2sls.lm`), log-linear regression model (`p2sls.loglin`), negative binomial regression model (`p2sls.negbin`), logistic regression model (`p2sls.logitreg`), and additive hazards regression model (`p2sls.ah`). For details of implementation, please refer to the documentation of the individual functions. Theoretical details can be found at Liu et al. ([2024](#ref-p2sls-glm)) and Li et al. ([2024](#ref-p2sls-ah)). An introduction of proximal causal inference can be found at Shi et al. ([2020](#ref-review)) and Tchetgen Tchetgen ([2024](#ref-intro)). 
+
+
 
 ## Installation
 
