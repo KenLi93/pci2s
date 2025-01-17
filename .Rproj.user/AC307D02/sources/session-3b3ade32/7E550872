@@ -1,14 +1,14 @@
 {
-    "id": "F5E5FC03",
-    "path": "F:/GitHub/pci2s/R/pciloglin.R",
-    "project_path": "R/pciloglin.R",
+    "id": "7E550872",
+    "path": "F:/GitHub/pci2s/R/pcilogit.R",
+    "project_path": "R/pcilogit.R",
     "type": "r_source",
-    "hash": "0",
+    "hash": "1572877131",
     "contents": "",
     "dirty": false,
-    "created": 1733888131508.0,
+    "created": 1733888140991.0,
     "source_on_save": false,
-    "relative_order": 4,
+    "relative_order": 6,
     "properties": {
         "source_window_id": "",
         "Source": "Source"

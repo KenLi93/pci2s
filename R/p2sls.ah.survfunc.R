@@ -1,0 +1,405 @@
+#' Calculative the counterfactual marginal survival curve for proximal two-stage-least-squares with survival outcome
+#'
+#' This function computes the counterfactual marginal survival curve for the proximal 
+#' two-stage-least-squares with survival outcome 
+#'
+#' @param Y an n-vector of observed time to event outcomes
+#' @param D an n-vector of event indicators for Y
+#' @param A an n-vector of primary exposure
+#' @param a a unidimensional scalar value to fix A=a for calculating the counterfactual survival curve
+#' @param X an n * nX matrix of adjusted covariates , can be empty
+#' @param W an n * nW matrix of negative control outcome (NCO)
+#' @param Z an n * nZ matrix of negative control exposure (NCE). Alternatively,
+#' the NCE can be included in the design matrix of the first-stage model by specifying
+#' Xw
+#' @param Xw a matrix with n rows or a list of length nW, each element is a design matrix of
+#' the corresponding NCO. Default is a matrix with columns of A, Z, X, and interactions between
+#' A, Z and A, X
+#' @param Xy a matrix with n rows, covariates to be adjusted for in the second-stage
+#' model besides A and predictors for W. This may include interaction between A and columns of X.
+#' Default to be X
+#' @param nco_type An nW-vector for the types of models used in the first-stage, including
+#' "linear" (linear model), "loglin" (log-linear model), "poisson" (Poisson regression model),
+#' "negbin" (negative-binomial regression model), and "ah" (Lin \& Ying's additive hazards model)
+#' @param nco_args A list of length nW containing additional arguments for the first-stage models.
+#' Each element in the list is a sublist and should contain a vector named "offset" (default 0).
+#' If nco_type == "ah", the sublist needs to include another vector named "event" as the event indicator
+#' (default 1). If nco_type == "negbin", the sublist needs to include a vector "init" as the initial values,
+#' which can be NA.
+#' @param haz_correct logical, whether the baseline hazard function will be collected so that the hazard functions
+#' for all individuals are non-negative.
+#' @param tmax The maximal time to calculate the counterfactual marginal survival functions. Default to be the 
+#' maximal event time multiplied by 1.05;
+#' @param nt Number of time points to evaluate the survival functions, evenly distributed between 0 and tmax. 
+#' @returns A data frame with two columns: t: time points where the counterfactual marginal survival functions are evaluated; 
+#' survfunc: value of the counterfactual marginal survival function
+#' @examples
+#' N <- 2000
+#' U <- runif(N); X <- runif(N)
+#' expit  <-  function(x) exp(x)/(1 + exp(x))
+#' A <- rbinom(N, 1, expit(-3 + 5 * U + 1 * X))
+#' Y <- rexp(N, 0.2 + 1.5 * U + 0.2 * X + 0.2 * A)
+#' D <- as.numeric(Y < 5)
+#' Y[D == 0] <- 5
+#' Z <- rnorm(N, 2 * U + 0.5 * X)
+#' W2 <- rexp(N, 0.1 + 1 * U + 0.1 * X)
+#' D2 <- as.numeric(W2 < 5)
+#' W2[D2 == 0] <- 5
+#' W <- cbind(W1 = rnbinom(N, size = 25, mu = exp(2.5 * U + 0.2 * X)),
+#'            W2)
+#' ## Obtain the counterfactual marginal survival curves under a = 0, 1
+#'
+#' p2sls_survfunc_a1 <- p2sls.ah.survfunc(Y = Y, D = D, A = A, a = 1, X = X,
+#'        W = W, Z = Z, nco_type = c("negbin", "ah"),
+#'        nco_args = list(list(offset = rep(0, N)),
+#'                        list(offset = rep(0, N),
+#'                             event = D2)))
+#'
+#' p2sls_survfunc_a0 <- p2sls.ah.survfunc(Y = Y, D = D, A = A, a = 0, X = X,
+#'        W = W, Z = Z, nco_type = c("negbin", "ah"),
+#'        nco_args = list(list(offset = rep(0, N)),
+#'                        list(offset = rep(0, N),
+#'                             event = D2)))
+#' 
+#' ## Plot the counterfactual marginal survival functions
+#' plot(survfunc ~ t, data = p2sls_survfunc_a0, type = "l", lwd = 2,
+#'     xlab = "Time", ylab = "Survival function")
+#' lines(survfunc ~ t, data = p2sls_survfunc_a1, lwd = 2, col = "red") 
+#' legend("topright", legend = c("a = 0", "a = 1"), lwd = 2,
+#'       col = c("black", "red"))
+#' @export
+#' 
+p2sls.ah.survfunc <- function(Y, D, A, a, X = NULL, W, Z = NULL, Xw = NULL,
+                              Xy = NULL,
+                              nco_type = NULL,
+                              nco_args = NULL,
+                              haz_correct = T,
+                              tmax = NULL, nt = 1000) {
+  
+  
+  
+  nn <- length(Y)
+  # clean data type
+  Y0 <- as.numeric(Y)
+  D0 <- as.numeric(D)
+  W0 <- matrix(as.matrix(as.data.frame(W)), nrow = length(Y0))
+  nW <- ncol(W0)
+  
+  ## add column names to W if needed
+  if (nW == 1) {
+    colnames(W0) <- "W"
+  } else {
+    if (is.null(colnames(W))) {
+      colnames(W0) <- paste0("W", 1:nW)
+    } else {
+      colnames(W0) <- colnames(as.data.frame(W))
+    }
+  }
+  
+  
+  if (!is.null(X)) {
+    X0 <- as.matrix(X)
+  } else {
+    X0 <- X
+  }
+  
+  nX <- ncol(X0)
+  ## add column names to X if needed
+  if (!is.null(X0)) {
+    if (nX == 1) {
+      colnames(X0) <- "X"
+    } else if (nX > 0) {
+      if (is.null(colnames(X))) {
+        colnames(X0) <- paste0("X", 1:nX)
+      } else {
+        colnames(X0) <- colnames(as.data.frame(X))
+      }
+    }
+  }
+  
+  A0 <- matrix(as.numeric(A), nrow = nn)
+  if (ncol(A0) == 1){
+    colnames(A0) <- "A"
+  } else {
+    colnames(A0) <- paste0("A", 1:ncol(A0))
+  }
+  
+  if (is.null(nco_type)) {
+    nco_type <- rep("linear", nW)
+  }
+  
+  if (length(nco_type) != nW) {
+    stop("length of nco_type should equal the number of columns of W.")
+  }
+  
+  #
+  if (!all(nco_type %in% c("linear", "poisson", "negbin", "loglin", "ah"))) {
+    stop("'nco_type' should be left empty or one of 'linear', 'poisson', 'negbin',
+         'loglin', and 'ah'.")
+  }
+  
+  
+  if (is.null(Xw)) {
+    if (is.null(Z)) {
+      stop("One of Z and Xw needs to be specified")
+    } else {
+      ## Default
+      Z0 <- as.matrix(Z)
+      
+      nZ <- ncol(Z0)
+      ## add column names to Z if needed
+      if (!is.null(Z0)) {
+        if (nZ == 1) {
+          colnames(Z0) <- "Z"
+        } else if (nZ > 0) {
+          if (is.null(colnames(Z))) {
+            colnames(Z0) <- paste0("Z", 1:nZ)
+          } else {
+            colnames(Z0) <- colnames(as.data.frame(Z))
+          }
+        }
+      }
+      
+      paste_int <- function(a1, a2) paste(a1, a2, sep = ":")
+      int_names <- function(names1, names2) c(outer(names1, names2, paste_int))
+      int_mat <- function(a1, a2) {
+        dplyr::bind_cols(apply(a2, 2, function(aa) a1 * aa, simplify = F))
+      }
+      
+      if (is.null(X0)) {
+        Xw0 <- lapply(1:nW, function(i) {  ## if no covariates, design matrix is A, Z and their interaction
+          if (nco_type[i] != "ah") {
+            xw <- as.matrix(cbind(1, A0, Z0, int_mat(Z0, A0)))
+            colnames(xw) <- c("(Intercept)", colnames(A0), colnames(Z0),
+                              int_names(colnames(Z0), colnames(A0)))
+          } else {
+            xw <- as.matrix(cbind(A0, Z0, int_mat(Z0, A0)))
+            colnames(xw) <- c(colnames(A0), colnames(Z0), int_names(colnames(Z0), colnames(A0)))
+          }
+          return(xw)
+        })
+      } else {
+        Xw0 <- lapply(1:nW, function(i) { ## with covariates, design matrix is A, Z, X and AZ, AX interactions
+          if (nco_type[i] != "ah") {
+            xw <- as.matrix(cbind(1, A0, X0, Z0, int_mat(X0, A0), int_mat(Z0, A0)))
+            colnames(xw) <- c("(Intercept)", colnames(A0), colnames(X0), colnames(Z0),
+                              int_names(colnames(X0), colnames(A0)),
+                              int_names(colnames(Z0), colnames(A0)))
+          } else {
+            xw <- as.matrix(cbind(A0, X0, Z0, int_mat(X0, A0), int_mat(Z0, A0)))
+            colnames(xw) <- c(colnames(A0), colnames(X0), colnames(Z0),
+                              int_names(colnames(X0), colnames(A0)),
+                              int_names(colnames(Z0), colnames(A0)))
+          }
+          return(xw)
+        })
+      }
+    }
+  } else {
+    if (is.data.frame(Xw) | is.matrix(Xw)) {  ## same design matrix for every NCO
+      Xw0 <- lapply(1:nW, function(i) {
+        xw <- as.matrix(Xw)
+        colnames(xw) <- colnames(Xw)
+        return(xw)
+      })
+    } else {
+      if (is.list(Xw)) {
+        Xw0 <- lapply(Xw, function(xwi) {
+          xw <- as.matrix(xwi)
+          colnames(xw) <- colnames(xwi)
+          return(xw)
+        })
+      }
+    }
+  }
+  
+  if (is.null(Xy)) {
+    Xy0 <- X0
+  } else {
+    Xy0 <- matrix(as.matrix(Xy), nrow = nn)
+    if (ncol(Xy0) == 1)  {
+      colnames(Xy0) <- "X"
+    } else {
+      colnames(Xy0) <- paste0("X", 1:ncol(Xy0))
+    }
+  }
+  
+  
+  if (is.null(nco_args)) {
+    nco_args <- lapply(1:nW,
+                       function(i) {
+                         if (nco_type[i] == "ah") {
+                           list(offset = rep(0, nn),
+                                event = rep(1, nn))
+                         } else if (nco_type[i] == "negbin") {
+                           list(offset = rep(0, nn),
+                                init = NA)
+                         } else {
+                           list(offset = rep(0, nn))
+                         }
+                       })
+  } else {
+    if (!is.list(nco_args)) {
+      stop("nco_args should either be left empty or a list of length ncol(W)")
+    } else if (length(nco_args) != nW) {
+      stop("nco_args should be a list of length ncol(W)")
+    }
+  }
+  
+  ## sort the data based on time to event
+  Y_order <- order(Y0)
+  t1 <- Y0[Y_order]
+  d1 <- D0[Y_order]
+  
+  if (!is.null(X0)) X1 <- X0[Y_order, ]
+  
+  t2 <- unique(t1)
+  ntime <- length(t2) # length of unique time points
+  dtime <- c(t2[1], diff(t2)) # increments of unique time points
+  
+  # obtain the order of time
+  o1 <- dplyr::left_join(data.frame(t1 = t1),
+                         data.frame(t1 = t2, o1 = 1:length(unique(t1))),
+                         by = "t1")$o1
+  tmin <- sapply(1:ntime, function(k) min(which(o1 == k)))
+  
+  
+  W1 <- W0[Y_order, , drop = F]
+  Xw1 <- lapply(Xw0, function(xx) xx[Y_order, , drop = F])
+  Xy1 <- Xy0[Y_order, , drop = F]
+  A1 <- A0[Y_order, , drop = F]
+  # fitting the 2SLS model
+  
+  ## first-stage model: for jth entry of W, fit the corresponding model
+  ## record the parameters, estimating equations, Jacobian, and number of
+  ## regression coefficients and nuisance parameters (for negative binomial regression)
+  W_model <- param_1s <- U1j <- J1j <- vector("list", length = nW)
+  
+  nparam1_main <- nparam1_nuisance <- rep(NA, nW)
+  ## predictor of W
+  W_hat <- matrix(nrow = nn, ncol = nW)
+  colnames(W_hat) <- colnames(W1)
+  ## in the custom functions, make sure the nuisance parameters are before the regression
+  ## coefficients
+  for (j in 1:nW) {
+    Wj <- W1[, j]
+    Xwj <- Xw1[[j]]
+    offset_j <- nco_args[[j]]$offset
+    if (is.null(offset_j)) {
+      offset_j <- rep(0, nn)
+    }
+    event_j <- nco_args[[j]]$event
+    if (is.null(event_j)) {
+      if (nco_type[j] == "ah") {
+        warning("Event indicator for the NCO not specified -- assume no censoring.")
+      }
+      event_j <- rep(1, nn)
+    }
+    init_j <- nco_args[[j]]$init
+    if (is.null(init_j)) {
+      init_j <- NA
+    }
+    if (nco_type[j] == "linear") {
+      W_model[[j]] <- linear_fit(y = Wj, x = Xwj, offset = offset_j,
+                                 variance = T)
+      ## no nuisance parameter
+      param_1s[[j]] <- W_model[[j]]$ESTIMATE
+      U1j[[j]] <- W_model[[j]]$EST_FUNC
+      J1j[[j]] <- W_model[[j]]$JACOBIAN
+      nparam1_main[j] <- length(W_model[[j]]$ESTIMATE)
+      nparam1_nuisance[j] <- 0
+      W_hat[, j] <- c(Xwj %*% param_1s[[j]])
+    } else if (nco_type[j] == "loglin") {
+      W_model[[j]] <- loglin_fit(y = Wj, x = Xwj, offset = offset_j,
+                                 variance = T)
+      
+      ## no nuisance parameter
+      param_1s[[j]] <- W_model[[j]]$ESTIMATE
+      U1j[[j]] <- W_model[[j]]$EST_FUNC
+      J1j[[j]] <- W_model[[j]]$JACOBIAN
+      nparam1_main[j] <- length(W_model[[j]]$ESTIMATE)
+      nparam1_nuisance[j] <- 0
+      W_hat[, j] <- c(Xwj %*% param_1s[[j]])
+    } else if (nco_type[j] == "poisson") {
+      W_model[[j]] <- poisson_fit(y = Wj, x = Xwj, offset = offset_j,
+                                  variance = T)
+      
+      ## no nuisance parameter
+      param_1s[[j]] <- W_model[[j]]$ESTIMATE
+      U1j[[j]] <- W_model[[j]]$EST_FUNC
+      J1j[[j]] <- W_model[[j]]$JACOBIAN
+      nparam1_main[j] <- length(W_model[[j]]$ESTIMATE)
+      nparam1_nuisance[j] <- 0
+      W_hat[, j] <- c(Xwj %*% param_1s[[j]])
+    } else if (nco_type[j] == "ah") {
+      W_model[[j]] <- lin_ah(time = Wj, event = event_j,
+                             covariates = Xwj, offset = offset_j)
+      
+      ## no nuisance parameter
+      param_1s[[j]] <- W_model[[j]]$ESTIMATE
+      U1j[[j]] <- W_model[[j]]$EST_FUNC
+      J1j[[j]] <- W_model[[j]]$JACOBIAN
+      nparam1_main[j] <- length(W_model[[j]]$ESTIMATE)
+      nparam1_nuisance[j] <- 0
+      W_hat[, j] <- c(Xwj %*% param_1s[[j]])
+    } else if (nco_type[j] == "negbin") {
+      W_model[[j]] <- negbin_fit(y = Wj, x = Xwj, offset = offset_j,
+                                 variance = T, init = init_j)
+      
+      ## one nuisance parameter
+      param_1s[[j]] <- W_model[[j]]$ESTIMATE
+      U1j[[j]] <- W_model[[j]]$EST_FUNC
+      J1j[[j]] <- W_model[[j]]$JACOBIAN
+      nparam1_main[j] <- length(W_model[[j]]$ESTIMATE) - 1
+      nparam1_nuisance[j] <- 1
+      W_hat[, j] <- c(Xwj %*% param_1s[[j]][-1])
+    }
+  }
+  
+  
+  ## second-stage model: fit the additive hazards model with the outcome against A, X and
+  ## predictors of W
+  
+  ## obtain the parameters from the second stage
+  ah_result <- lin_ah(time = t1, event = d1,
+                      covariates = cbind(A1, Xy1, W_hat))
+  param_2s <- ah_result$ESTIMATE
+  beta_a <- param_2s[1]
+  
+  cov_2s <- cbind(A1, Xy1, W_hat)
+  linpred <- c(cov_2s %*% param_2s)
+  
+  haz0_k <- ah_result$HAZ
+  haz0_i <- rep(NA, length(t1))
+  for (kk in 1:length(haz0_k)) {
+    haz0_i[t1 == unique(t1)[kk]] <- haz0_k[kk]
+  }
+  haz_i <- haz0_i + c(cov_2s %*% param_2s)
+  
+  ## correct the baseline hazard so that estimated hazard function is non-negative for all
+  ## subjects
+  if (haz_correct == T) {
+    haz0_i <- haz0_i - pmin(haz_i, 0)
+    haz0_k <- haz0_i[!duplicated(t1)]
+  }
+  
+  cumhaz0_k <- cumsum(haz0_k)
+  cumhaz0_2s <- stepfun(x = unique(t1), y = c(0, cumhaz_k))
+  
+  if (is.null(tmax)) {
+    tmax <- max(t1) * 1.05
+  }
+  
+  
+  tseq <- seq(0, tmax, length.out = nt)
+  survfunc <- tseq * NA
+  
+  for (i in 1:nt) {
+    ti <- tseq[i]
+    survfunc[i] <- exp(-ti * beta_a * a) * mean(c(exp(ti * beta_a * A1)) * exp(-cumhaz0_2s(ti) - ti * linpred))
+  }
+  
+  out <- data.frame(t = tseq, survfunc = survfunc)
+  
+  return(out)
+}
