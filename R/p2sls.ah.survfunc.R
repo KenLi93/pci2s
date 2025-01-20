@@ -384,7 +384,7 @@ p2sls.ah.survfunc <- function(Y, D, A, a, X = NULL, W, Z = NULL, Xw = NULL,
   }
   
   cumhaz0_k <- cumsum(haz0_k)
-  cumhaz0_2s <- stepfun(x = unique(t1), y = c(0, cumhaz_k))
+  cumhaz0_2s <- stepfun(x = unique(t1), y = c(0, cumhaz0_k))
   
   if (is.null(tmax)) {
     tmax <- max(t1) * 1.05
