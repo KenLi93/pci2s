@@ -1,26 +1,26 @@
 {
-    "id": "F81407CD",
-    "path": "F:/GitHub/pci2s/R/pcilm.R",
-    "project_path": "R/pcilm.R",
+    "id": "F5E5FC03",
+    "path": "F:/GitHub/pci2s/R/pciloglin.R",
+    "project_path": "R/pciloglin.R",
     "type": "r_source",
-    "hash": "0",
+    "hash": "2453722421",
     "contents": "",
     "dirty": false,
-    "created": 1737517152164.0,
+    "created": 1733888131508.0,
     "source_on_save": false,
-    "relative_order": 10,
+    "relative_order": 4,
     "properties": {
         "source_window_id": "",
         "Source": "Source",
-        "cursorPosition": "204,2",
-        "scrollLine": "184"
+        "cursorPosition": "209,2",
+        "scrollLine": "195"
     },
     "folds": "",
-    "lastKnownWriteTime": 1737517170,
+    "lastKnownWriteTime": 1737517145,
     "encoding": "UTF-8",
     "collab_server": "",
     "source_window": "",
-    "last_content_update": 1737517170552,
+    "last_content_update": 1737517145585,
     "read_only": false,
     "read_only_alternatives": []
 }

@@ -361,8 +361,8 @@ p2sls.ah.survfunc <- function(Y, D, A, a, X = NULL, W, Z = NULL, Xw = NULL,
   ## correct the baseline hazard so that estimated hazard function is non-negative for all
   ## subjects
   if (haz_correct == T) {
-    haz0_i <- haz0_i - pmin(haz_i, 0)
-    haz0_k <- haz0_i[!duplicated(t1)]
+    haz0_i <- pmax(haz0_i, 0)
+    haz0_k <- pmax(haz0_k, 0)
   }
   
   cumhaz0_k <- cumsum(haz0_k)
@@ -381,7 +381,7 @@ p2sls.ah.survfunc <- function(Y, D, A, a, X = NULL, W, Z = NULL, Xw = NULL,
     survfunc[i] <- exp(-ti * beta_a * a) * mean(c(exp(ti * beta_a * A1)) * exp(-cumhaz0_2s(ti) - ti * linpred))
     
     if (i >= 2 & haz_correct == T) {
-      survfunc[i] <- max(survfunc[i], survfunc[i - 1])
+      survfunc[i] <- min(survfunc[i], survfunc[i - 1])  ## survival function must be non-increasing
     }
   }
   
