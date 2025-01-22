@@ -207,6 +207,9 @@ p2sls.ah <- function(Y, D, A, X = NULL, W, Z = NULL, Xw = NULL,
     }
   }
 
+  if (!is.null(Z)) {
+    Z0 <- as.matrix(Z)
+  }
 
   if (is.null(nco_args)) {
     nco_args <- lapply(1:nW,

@@ -202,7 +202,10 @@ p2sls.lm <- function(Y, offset = rep(0, length(Y)),
       colnames(Xy0) <- paste0("X", 1:ncol(Xy0))
     }
   }
-
+  
+  if (!is.null(Z)) {
+    Z0 <- as.matrix(Z)
+  }
 
   if (is.null(nco_args)) {
     nco_args <- lapply(1:nW,

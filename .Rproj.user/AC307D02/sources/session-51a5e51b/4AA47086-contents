@@ -1,9 +1,11 @@
-#' Proximal Two-stage-least-squares with count outcomes
-#' This function computes the adjusted rate ratio using negative-binomial regression model,
-#' using a pair of negative control variable
+#' Proximal Two-stage-least-squares with survival outcome
 #'
-#' @param Y an n-vector of count outcomes
-#' @param offset an n-vector of offset for Y
+#' This function computes the adjusted hazard difference using additive hazards model by
+#' Lin \& Ying 1994, using a pair of negative control variable to control for unmeasured
+#' confounding
+#'
+#' @param Y an n-vector of observed time to event outcomes
+#' @param D an n-vector of event indicators for Y
 #' @param A an n-vector of primary exposure
 #' @param X an n * nX matrix of adjusted covariates , can be empty
 #' @param W an n * nW matrix of negative control outcome (NCO)
@@ -29,41 +31,41 @@
 #' model; SE produces their standard error, and PARAM includes all parameter estimates
 #' @examples
 #' N <- 2000
-#' expit  <-  function(x) exp(x)/(1 + exp(x))
 #' U <- runif(N); X <- runif(N)
+#' expit  <-  function(x) exp(x)/(1 + exp(x))
 #' A <- rbinom(N, 1, expit(-3 + 5 * U + 1 * X))
-#' Y <- rpois(N, exp(0.2 + 1.5 * U + 0.2 * X + 0.2 * A))
+#' Y <- rexp(N, 0.2 + 1.5 * U + 0.2 * X + 0.2 * A)
+#' D <- as.numeric(Y < 5)
+#' Y[D == 0] <- 5
 #' Z <- rnorm(N, 2 * U + 0.5 * X)
 #' W2 <- rexp(N, 0.1 + 1 * U + 0.1 * X)
 #' D2 <- as.numeric(W2 < 5)
 #' W2[D2 == 0] <- 5
-#' W <- cbind(W1 = rnbinom(N, size = 25,
-#'                    mu = exp(2.5 * U + 0.2 * X)),
+#' W <- cbind(W1 = rnbinom(N, size = 25, mu = exp(2.5 * U + 0.2 * X)),
 #'            W2)
-#' p2sls_result <- p2sls.negbin(Y = Y, A = A, X = X,
-#'        W = W, Z = Z,
+#' p2sls_result <- p2sls.ah(Y = Y, D = D, A = A, X = X,
+#'        W = W, Z = Z, variance = TRUE,
 #'        nco_type = c("negbin", "ah"),
 #'        nco_args = list(list(offset = rep(0, N)),
 #'                        list(offset = rep(0, N),
 #'                             event = D2)))
 #' p2sls_result$summary_first_stage
 #' p2sls_result$summary_second_stage
+#'
 #' @export
-p2sls.negbin <- function(Y, offset = rep(0, length(Y)),
-                       A, X = NULL, W, Z = NULL, Xw = NULL,
-                       Xy = NULL,
-                       nco_type = NULL,
-                       nco_args = NULL,
-                       nb_init = NA,
-                       variance = TRUE, verbose = F) {
+p2sls.ah <- function(Y, D, A, X = NULL, W, Z = NULL, Xw = NULL,
+                    Xy = NULL,
+                    nco_type = NULL,
+                    nco_args = NULL,
+                    variance = TRUE, verbose = FALSE) {
 
 
 
   nn <- length(Y)
   # clean data type
   Y0 <- as.numeric(Y)
-  eta0 <- as.numeric(offset)
-  W0 <- matrix(as.matrix(W), nrow = length(Y0))
+  D0 <- as.numeric(D)
+  W0 <- matrix(as.matrix(as.data.frame(W)), nrow = length(Y0))
   nW <- ncol(W0)
 
   ## add column names to W if needed
@@ -76,6 +78,7 @@ p2sls.negbin <- function(Y, offset = rep(0, length(Y)),
       colnames(W0) <- colnames(as.data.frame(W))
     }
   }
+
 
   if (!is.null(X)) {
     X0 <- as.matrix(X)
@@ -99,7 +102,7 @@ p2sls.negbin <- function(Y, offset = rep(0, length(Y)),
 
   A0 <- matrix(as.numeric(A), nrow = nn)
   if (ncol(A0) == 1){
-    colnames(A0) <- "A"
+  colnames(A0) <- "A"
   } else {
     colnames(A0) <- paste0("A", 1:ncol(A0))
   }
@@ -187,7 +190,7 @@ p2sls.negbin <- function(Y, offset = rep(0, length(Y)),
         Xw0 <- lapply(Xw, function(xwi) {
           xw <- as.matrix(xwi)
           colnames(xw) <- colnames(xwi)
-          xw
+          return(xw)
         })
       }
     }
@@ -204,6 +207,9 @@ p2sls.negbin <- function(Y, offset = rep(0, length(Y)),
     }
   }
 
+  if (!is.null(Z)) {
+    Z0 <- as.matrix(Z)
+  }
 
   if (is.null(nco_args)) {
     nco_args <- lapply(1:nW,
@@ -226,6 +232,31 @@ p2sls.negbin <- function(Y, offset = rep(0, length(Y)),
     }
   }
 
+  ## sort the data based on time to event
+  Y_order <- order(Y0)
+  t1 <- Y0[Y_order]
+  d1 <- D0[Y_order]
+
+
+
+
+  if (!is.null(X0)) X1 <- X0[Y_order, ]
+
+  t2 <- unique(t1)
+  ntime <- length(t2) # length of unique time points
+  dtime <- c(t2[1], diff(t2)) # increments of unique time points
+
+  # obtain the order of time
+  o1 <- dplyr::left_join(data.frame(t1 = t1),
+                         data.frame(t1 = t2, o1 = 1:length(unique(t1))),
+                         by = "t1")$o1
+  tmin <- sapply(1:ntime, function(k) min(which(o1 == k)))
+
+
+  W1 <- W0[Y_order, , drop = F]
+  Xw1 <- lapply(Xw0, function(xx) xx[Y_order, , drop = F])
+  Xy1 <- Xy0[Y_order, , drop = F]
+  A1 <- A0[Y_order, , drop = F]
   # fitting the 2SLS model
 
   ## first-stage model: for jth entry of W, fit the corresponding model
@@ -236,26 +267,27 @@ p2sls.negbin <- function(Y, offset = rep(0, length(Y)),
   nparam1_main <- nparam1_nuisance <- rep(NA, nW)
   ## predictor of W
   W_hat <- matrix(nrow = nn, ncol = nW)
-  colnames(W_hat) <- colnames(W0)
+  colnames(W_hat) <- colnames(W1)
   ## in the custom functions, make sure the nuisance parameters are before the regression
   ## coefficients
   for (j in 1:nW) {
-    Wj <- W0[, j]
-    Xwj <- Xw0[[j]]
+    Wj <- W1[, j]
+    Xwj <- Xw1[[j]]
     offset_j <- nco_args[[j]]$offset
     if (is.null(offset_j)) {
       offset_j <- rep(0, nn)
     }
     event_j <- nco_args[[j]]$event
-    if (nco_type[j] == "ah" & is.null(event_j)) {
-      warning("Event indicator for the NCO not specified -- assume no censoring.")
+    if (is.null(event_j)) {
+      if (nco_type[j] == "ah") {
+        warning("Event indicator for the NCO not specified -- assume no censoring.")
+      }
       event_j <- rep(1, nn)
     }
     init_j <- nco_args[[j]]$init
     if (is.null(init_j)) {
       init_j <- NA
     }
-
     if (nco_type[j] == "linear") {
       W_model[[j]] <- linear_fit(y = Wj, x = Xwj, offset = offset_j,
                                  variance = T)
@@ -316,27 +348,15 @@ p2sls.negbin <- function(Y, offset = rep(0, length(Y)),
 
   ## second-stage model: fit the additive hazards model with the outcome against A, X and
   ## predictors of W
-  negbin_result <- negbin_fit(y = Y0, x = cbind(1, A0, Xy0, W_hat),
-                              init = nb_init, offset = eta0)
-  param_2s <- negbin_result$ESTIMATE
-  names(param_2s)  <- c("size", "(Intercept)", colnames(A0) , colnames(Xy0) , colnames(W_hat))
-  param_2_theta <- param_2s[1] ## size parameter of the negative binomial regression
-  param_2_beta <- param_2s[-1] ## regression coefficients
+  ah_result <- lin_ah(time = t1, event = d1,
+                      covariates = cbind(A1, Xy1, W_hat))
+  param_2s <- ah_result$ESTIMATE
+
   params <- as.numeric(c(unlist(param_1s), param_2s))
-
-
-  if (verbose) {
-    # The number of stage 1 parameters is only correct for when stage 1 is negative binomial and additive hazard models
-    negbin.stage1.nparam  <-  (1 + 1 + ncol(A0) + ncol(X0) + ncol(Z0) + ncol(A0) * ncol(X0) + ncol(A0) * ncol(Z0))*sum(nco_type == 'negbin') # Each negbin has 1 nuisance + intercept + A + X + Z + AX + AZ
-    ah.stage1.nparam  <- (ncol(A0) + ncol(X0) + ncol(Z0) +  ncol(A0) * ncol(X0) + ncol(A0) * ncol(Z0)) * sum(nco_type == 'ah')  # Each ah has  A + X + Z + AX + AZ (no intercept)
-    stage2.nparam  <- (2 + ncol(A0) + ncol(Xy0) + ncol(W_hat)) # nuisance + intercept + A + X + W_hat
-    print(sprintf('Number of params: Negbin stage 1: %d, AH stage 1: %d, stage2: %d, total: %d, check: %d', negbin.stage1.nparam, ah.stage1.nparam, stage2.nparam, negbin.stage1.nparam+ah.stage1.nparam+stage2.nparam, length(params)))
-  }
-
 
   if (variance) {
 
-    np_s2 <- length(param_2s) ## number of parameters in the second stage model
+    np_s2 <- ncol(A1) + nW + ncol(Xy1) ## number of parameters in the second stage model
     par_W <- tail(params, nW)  ## parameters associated with W_hat
 
     U1 <- suppressMessages(as.matrix(dplyr::bind_cols(U1j)))
@@ -344,7 +364,7 @@ p2sls.negbin <- function(Y, offset = rep(0, length(Y)),
 
 
 
-    U2 <- negbin_result$EST_FUNC # make predictors of W
+    U2 <- ah_result$EST_FUNC# make predictors of W
 
 
     U <- cbind(U1, U2)
@@ -352,42 +372,119 @@ p2sls.negbin <- function(Y, offset = rep(0, length(Y)),
 
     ## Jacobian matrix
     ## make predictors of W
-    np_s2 <- length(param_2s)
-    S2 <- as.matrix(cbind(1, A0, Xy0, W_hat))
+    S2 <- as.matrix(cbind(A1, Xy1, W_hat))
 
     J12 <- matrix(0, nrow = sum(nparam1_main) + sum(nparam1_nuisance), ncol = np_s2)
 
     J21_i <- array(0, dim = c(np_s2, sum(nparam1_main), nn))
 
+    ## get incremental cumulative hazard and hazard function at each time point
+    cumhaz <- ah_result$CUMHAZ_K
+    haz <- ah_result$HAZ
+
     ## the last nW rows of Jacobian of M against gamma for each individual
     dW_i <- array(0, dim = c(nW, sum(nparam1_main), nn))
 
     for (i in 1:nn) {
-      S1i <- lapply(Xw0, function(x) t(x[i,]))
+      S1i <- lapply(Xw1, function(x) t(x[i,]))
       dW_i[, , i] <- as.matrix(Matrix::bdiag(S1i))
     }
+
+    ## the last nW rows of Jacobian of \bar S2(T_{(k)}) against gamma for
+    ## each individual at each unique event time
+    dbW_Tk <- dsW_Tk <- array(0, dim = c(nW, sum(nparam1_main), ntime))
+
+
+    for (k in ntime:1) {
+      if (k == ntime) {
+        dsW_Tk[, , k] <- apply(dW_i[, ,tmin[k]:nn, drop = F], c(1, 2), sum)
+        dbW_Tk[, , k] <- dsW_Tk[, , k] / sum(o1 == ntime)
+      } else {
+        dsW_Tk[, , k] <- dsW_Tk[, , k + 1] +
+          apply(dW_i[, ,tmin[k]:(tmin[k + 1] - 1), drop = F], c(1, 2), sum)
+        dbW_Tk[, , k] <- dsW_Tk[, , k] / sum(o1 >= k)
+      }
+    }
+
+    # integral of dbM_Tk by time
+    int_dbW_Tk <- dbW_Tk
+
+    for (k in 1:ntime) {
+      int_dbW_Tk[, , k] <- int_dbW_Tk[, , k] * dtime[k]
+
+      if (k >= 2) {
+        int_dbW_Tk[, , k] <- int_dbW_Tk[, , k] + int_dbW_Tk[, , k - 1]
+      }
+    }
+
+    ## Jacobian of the incremental cumulative hazard against gamma at each
+    ## event time
+    dhaz <- array(0, dim = c(1, sum(nparam1_main), ntime))
+
+    for (k in 1:ntime) {
+      dhaz[, , k] <- - par_W %*% dbW_Tk[, , k] * dtime[k]
+    }
+
+    ## average of S2 among the at-risk and its cumulative
+    Zb_Tk <- matrix(NA, nrow = ntime, ncol = ncol(S2))
+    for (k in 1:ntime) {
+      Zb_Tk[k, ] <- colSums(matrix(S2[tmin[k]:nn,], ncol = ncol(S2))) /
+        sum(o1 >= k)
+    }
+
+    int_Zb_Tk <- apply(Zb_Tk * dtime, 2, cumsum)
+
+    ## Jacobian of the cumulative hazard against gamma at each
+    ## event time
+
+    dcumhaz <- dhaz
+    for (k in 2:ntime) {
+      dcumhaz[, , k] <- dcumhaz[, , k] + dcumhaz[, , k - 1]
+    }
+
+    ## integral of Zb_Tk with respect to dhaz and intergral of
+    ## dbM_Tk with respect to haz
+    int_dW_haz <- array(0, dim = c(nW, sum(nparam1_main), ntime))
+
+    int_Zb_dhaz <- array(0, dim = c(ncol(S2), sum(nparam1_main), ntime))
+
+    for (k in 1:ntime) {
+      int_Zb_dhaz[, , k] <- Zb_Tk[k, ] %*% t(dhaz[, , k])
+      int_dW_haz[, , k] <- dbW_Tk[, , k] * haz[k]
+
+      if (k >= 2) {
+        int_Zb_dhaz[, , k] <- int_Zb_dhaz[, , k] + int_Zb_dhaz[, , k - 1]
+        int_dW_haz[, , k] <- int_dW_haz[, , k] + int_dW_haz[, , k - 1]
+      }
+    }
+
+
+
+
     ## Jacobian for every individual
     for (i in 1:nn) {
-      dS2_i <- rbind(matrix(0, nrow = ifelse(is.null(Xy0), 1 + ncol(A0),
-                                             1 + ncol(A0) + ncol(Xy0)),
-                            ncol = sum(nparam1_main)),
+      dS2_i <- rbind(matrix(0, nrow = ifelse(is.null(Xy1), ncol(A1), ncol(A1) + ncol(Xy1)), ncol = sum(nparam1_main)),
                      dW_i[, , i])
-      mu_i <- exp(eta0[i] + c(S2[i, ] %*% param_2_beta))
-      # if (mu_i > 100){
-      #       print(sprintf('%d, %.0e',i, mu_i))
-      # }
-      J21_i1 <- (param_2_theta + mu_i) / param_2_theta * mu_i *
-        t(param_2_beta) %*% dS2_i +
-        (param_2_theta + Y0[i]) / (param_2_theta + mu_i) ^ 2 * mu_i *
-        t(param_2_beta) %*% dS2_i
+      dbS2_Ti <- rbind(matrix(0, nrow = ifelse(is.null(Xy1), ncol(A1), ncol(A1) + ncol(Xy1)), ncol = sum(nparam1_main)),
+                       dbW_Tk[, , o1[i]])
 
-      J21_i2 <- (Y0[i] - mu_i) / (param_2_theta + mu_i) * param_2_theta * dS2_i -
-        param_2_theta * mu_i / (param_2_theta + mu_i) *
-        c(S2[i, ]) %*% t(param_2_beta) %*% dS2_i -
-        (Y0[i] - mu_i) / (param_2_theta + mu_i) ^ 2 * param_2_theta * mu_i *
-        c(S2[i, ]) %*% t(param_2_beta) %*% dS2_i
+      J21_i1 <- dS2_i * (d1[i] - cumhaz[o1[i]] - c(param_2s %*% S2[i, ]) * t1[i])
 
-      J21_i[, , i] <- rbind(J21_i1, J21_i2)
+      J21_i2 <- S2[i, ] %*% (-dcumhaz[, , o1[i]] - par_W %*% dW_i[, , i] * t1[i])
+
+      J21_i3 <- d1[i] * dbS2_Ti
+
+      J21_i4 <- rbind(matrix(0, nrow = ifelse(is.null(Xy1), ncol(A1), ncol(A1) + ncol(Xy1)), ncol = sum(nparam1_main)),
+                      int_dW_haz[, , o1[i]])
+
+      J21_i5 <- int_Zb_dhaz[, , o1[i]]
+      J21_i6 <- int_Zb_Tk[o1[i], ] %*% t(par_W) %*% dW_i[, , i]
+      J21_i7 <- c(param_2s %*% S2[i, ]) *
+        rbind(matrix(0, nrow = ifelse(is.null(Xy1), ncol(A1), ncol(A1) + ncol(Xy1)), ncol = sum(nparam1_main)),
+              int_dbW_Tk[, , o1[i]])
+
+      J21_i[, , i] <- J21_i1 + J21_i2 - J21_i3 + J21_i4 + J21_i5 + J21_i6 +
+        J21_i7
     }
 
     J21_main <- apply(J21_i, c(1, 2), sum)
@@ -406,14 +503,14 @@ p2sls.negbin <- function(Y, offset = rep(0, length(Y)),
     ## average derivative matrix among the at-risk at each time point
 
 
-    J22 <- negbin_result$JACOBIAN
+    J22 <- ah_result$JACOBIAN
 
     JJ <- rbind(cbind(J11, J12), cbind(J21, J22))
+
     if (verbose) {
       dout  <- svd(JJ)$d
-      print(sprintf('Condition number of the Fisher information matrix is %1.1e', dout[1]/dout[length(dout)]))
+      print(sprintf('Condition number of the Fisher information matrix is %1.1e', dout[1] / dout[length(dout)]))
     }
-
     Jinv <- solve(JJ)
 
     DD <- t(U) %*% U
@@ -428,11 +525,9 @@ p2sls.negbin <- function(Y, offset = rep(0, length(Y)),
     summ_main[, 3] <- param_2s / se_2s
     summ_main[, 4] <- pchisq((param_2s / se_2s) ^ 2, df = 1, lower.tail = F)
 
-
     colnames(summ_main) <- c("Estimate", "Std. Error", "z value",
                              "Pr(>|z|)")
-    # browser()
-    rownames(summ_main) <- c("size", "(Intercept)", colnames(A0) , colnames(Xy0) , colnames(W_hat))
+    rownames(summ_main) <- c(colnames(A1), colnames(Xy1), colnames(W_hat))
     summ_nuisance <- lapply(W_model, function(x) x$summary)
     if (nW > 1) names(summ_nuisance) <- paste0("W", 1:nW)
 
@@ -442,7 +537,10 @@ p2sls.negbin <- function(Y, offset = rep(0, length(Y)),
                 summary_second_stage = summ_main))
   }
 
-
   return(list(ESTIMATE = param_2s,
               PARAM = unlist(c(param_1s, param_2s))))
+
 }
+
+
+

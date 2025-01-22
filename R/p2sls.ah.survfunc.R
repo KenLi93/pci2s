@@ -224,6 +224,9 @@ p2sls.ah.survfunc <- function(Y, D, A, a, X = NULL, W, Z = NULL, Xw = NULL,
     }
   }
   
+  if (!is.null(Z)) {
+    Z0 <- as.matrix(Z)
+  }
   
   if (is.null(nco_args)) {
     nco_args <- lapply(1:nW,
@@ -274,7 +277,7 @@ p2sls.ah.survfunc <- function(Y, D, A, a, X = NULL, W, Z = NULL, Xw = NULL,
   ## record the parameters, estimating equations, Jacobian, and number of
   ## regression coefficients and nuisance parameters (for negative binomial regression)
   W_model <- param_1s <- vector("list", length = nW)
-
+  
   ## predictor of W
   W_hat <- matrix(nrow = nn, ncol = nW)
   colnames(W_hat) <- colnames(W1)

@@ -204,7 +204,10 @@ p2sls.loglin <- function(Y, offset = rep(0, length(Y)),
     }
   }
 
-
+  if (!is.null(Z)) {
+    Z0 <- as.matrix(Z)
+  }
+  
   if (is.null(nco_args)) {
     nco_args <- lapply(1:nW,
                        function(i) {

@@ -232,6 +232,9 @@ p2sls.logitreg <- function(Y, offset = rep(0, length(Y)),
     }
   }
 
+  if (!is.null(Z)) {
+    Z0 <- as.matrix(Z)
+  }
   # fitting the 2SLS model
 
   ## first-stage model: fit a multiple logistic regression model for W
