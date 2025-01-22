@@ -38,13 +38,13 @@
 #' U <- runif(N); X <- runif(N)
 #' expit  <-  function(x) exp(x)/(1 + exp(x))
 #' A <- rbinom(N, 1, expit(-3 + 5 * U + 1 * X))
-#' Y <- rexp(N, 0.2 + 1.5 * U + 0.2 * X + 0.2 * A)
-#' D <- as.numeric(Y < 5)
-#' Y[D == 0] <- 5
+#' Y <- rexp(N, 0.5 * U + 0.2 * X + 0.2 * A)
+#' D <- as.numeric(Y < 4)
+#' Y[D == 0] <- 4
 #' Z <- rnorm(N, 2 * U + 0.5 * X)
 #' W2 <- rexp(N, 0.1 + 1 * U + 0.1 * X)
-#' D2 <- as.numeric(W2 < 5)
-#' W2[D2 == 0] <- 5
+#' D2 <- as.numeric(W2 < 4)
+#' W2[D2 == 0] <- 4
 #' W <- cbind(W1 = rnbinom(N, size = 25, mu = exp(2.5 * U + 0.2 * X)),
 #'            W2)
 #' ## Obtain the counterfactual marginal survival curves under a = 0, 1
@@ -63,7 +63,7 @@
 #' 
 #' ## Plot the counterfactual marginal survival functions
 #' plot(survfunc ~ t, data = p2sls_survfunc_a0, type = "l", lwd = 2,
-#'     xlab = "Time", ylab = "Survival function")
+#'     xlab = "Time", ylim = c(0, 1), ylab = "Survival function")
 #' lines(survfunc ~ t, data = p2sls_survfunc_a1, lwd = 2, col = "red") 
 #' legend("topright", legend = c("a = 0", "a = 1"), lwd = 2,
 #'       col = c("black", "red"))
@@ -273,9 +273,8 @@ p2sls.ah.survfunc <- function(Y, D, A, a, X = NULL, W, Z = NULL, Xw = NULL,
   ## first-stage model: for jth entry of W, fit the corresponding model
   ## record the parameters, estimating equations, Jacobian, and number of
   ## regression coefficients and nuisance parameters (for negative binomial regression)
-  W_model <- param_1s <- U1j <- J1j <- vector("list", length = nW)
-  
-  nparam1_main <- nparam1_nuisance <- rep(NA, nW)
+  W_model <- param_1s <- vector("list", length = nW)
+
   ## predictor of W
   W_hat <- matrix(nrow = nn, ncol = nW)
   colnames(W_hat) <- colnames(W1)
@@ -304,10 +303,6 @@ p2sls.ah.survfunc <- function(Y, D, A, a, X = NULL, W, Z = NULL, Xw = NULL,
                                  variance = T)
       ## no nuisance parameter
       param_1s[[j]] <- W_model[[j]]$ESTIMATE
-      U1j[[j]] <- W_model[[j]]$EST_FUNC
-      J1j[[j]] <- W_model[[j]]$JACOBIAN
-      nparam1_main[j] <- length(W_model[[j]]$ESTIMATE)
-      nparam1_nuisance[j] <- 0
       W_hat[, j] <- c(Xwj %*% param_1s[[j]])
     } else if (nco_type[j] == "loglin") {
       W_model[[j]] <- loglin_fit(y = Wj, x = Xwj, offset = offset_j,
@@ -315,10 +310,6 @@ p2sls.ah.survfunc <- function(Y, D, A, a, X = NULL, W, Z = NULL, Xw = NULL,
       
       ## no nuisance parameter
       param_1s[[j]] <- W_model[[j]]$ESTIMATE
-      U1j[[j]] <- W_model[[j]]$EST_FUNC
-      J1j[[j]] <- W_model[[j]]$JACOBIAN
-      nparam1_main[j] <- length(W_model[[j]]$ESTIMATE)
-      nparam1_nuisance[j] <- 0
       W_hat[, j] <- c(Xwj %*% param_1s[[j]])
     } else if (nco_type[j] == "poisson") {
       W_model[[j]] <- poisson_fit(y = Wj, x = Xwj, offset = offset_j,
@@ -326,10 +317,6 @@ p2sls.ah.survfunc <- function(Y, D, A, a, X = NULL, W, Z = NULL, Xw = NULL,
       
       ## no nuisance parameter
       param_1s[[j]] <- W_model[[j]]$ESTIMATE
-      U1j[[j]] <- W_model[[j]]$EST_FUNC
-      J1j[[j]] <- W_model[[j]]$JACOBIAN
-      nparam1_main[j] <- length(W_model[[j]]$ESTIMATE)
-      nparam1_nuisance[j] <- 0
       W_hat[, j] <- c(Xwj %*% param_1s[[j]])
     } else if (nco_type[j] == "ah") {
       W_model[[j]] <- lin_ah(time = Wj, event = event_j,
@@ -337,10 +324,6 @@ p2sls.ah.survfunc <- function(Y, D, A, a, X = NULL, W, Z = NULL, Xw = NULL,
       
       ## no nuisance parameter
       param_1s[[j]] <- W_model[[j]]$ESTIMATE
-      U1j[[j]] <- W_model[[j]]$EST_FUNC
-      J1j[[j]] <- W_model[[j]]$JACOBIAN
-      nparam1_main[j] <- length(W_model[[j]]$ESTIMATE)
-      nparam1_nuisance[j] <- 0
       W_hat[, j] <- c(Xwj %*% param_1s[[j]])
     } else if (nco_type[j] == "negbin") {
       W_model[[j]] <- negbin_fit(y = Wj, x = Xwj, offset = offset_j,
@@ -348,25 +331,21 @@ p2sls.ah.survfunc <- function(Y, D, A, a, X = NULL, W, Z = NULL, Xw = NULL,
       
       ## one nuisance parameter
       param_1s[[j]] <- W_model[[j]]$ESTIMATE
-      U1j[[j]] <- W_model[[j]]$EST_FUNC
-      J1j[[j]] <- W_model[[j]]$JACOBIAN
-      nparam1_main[j] <- length(W_model[[j]]$ESTIMATE) - 1
-      nparam1_nuisance[j] <- 1
       W_hat[, j] <- c(Xwj %*% param_1s[[j]][-1])
     }
   }
-  
   
   ## second-stage model: fit the additive hazards model with the outcome against A, X and
   ## predictors of W
   
   ## obtain the parameters from the second stage
-  ah_result <- lin_ah(time = t1, event = d1,
-                      covariates = cbind(A1, Xy1, W_hat))
-  param_2s <- ah_result$ESTIMATE
-  beta_a <- param_2s[1]
+  ah_result <- lin_ah(time = t1, event = d1, covariates = cbind(A1, Xy1, W_hat))
+  beta_a <- ah_result$ESTIMATE[1]
   
-  cov_2s <- cbind(A1, Xy1, W_hat)
+  X1 <- X0[Y_order,]; Z1 <- Z0[Y_order,]
+  axz_model <- lin_ah(time = t1, event = d1, covariates = cbind(A1, X1, Z1))
+  param_2s <- axz_model$ESTIMATE
+  cov_2s <- cbind(A1, X1, Z1)
   linpred <- c(cov_2s %*% param_2s)
   
   haz0_k <- ah_result$HAZ
@@ -397,6 +376,10 @@ p2sls.ah.survfunc <- function(Y, D, A, a, X = NULL, W, Z = NULL, Xw = NULL,
   for (i in 1:nt) {
     ti <- tseq[i]
     survfunc[i] <- exp(-ti * beta_a * a) * mean(c(exp(ti * beta_a * A1)) * exp(-cumhaz0_2s(ti) - ti * linpred))
+    
+    if (i >= 2 & haz_correct == T) {
+      survfunc[i] <- max(survfunc[i], survfunc[i - 1])
+    }
   }
   
   out <- data.frame(t = tseq, survfunc = survfunc)
