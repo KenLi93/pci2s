@@ -351,7 +351,7 @@ p2sls.ah.survfunc <- function(Y, D, A, a, X = NULL, W, Z = NULL, Xw = NULL,
   cov_2s <- cbind(A1, X1, Z1)
   linpred <- c(cov_2s %*% param_2s)
   
-  haz0_k <- axz_result$HAZ
+  haz0_k <- axz_model$HAZ
   haz0_i <- rep(NA, length(t1))
   for (kk in 1:length(haz0_k)) {
     haz0_i[t1 == unique(t1)[kk]] <- haz0_k[kk]
