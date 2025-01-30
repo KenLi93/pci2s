@@ -16,7 +16,7 @@ p2sls.ah.survfunc(
   Xy = NULL,
   nco_type = NULL,
   nco_args = NULL,
-  haz_correct = T,
+  surv_correct = T,
   tmax = NULL,
   nt = 1000
 )
@@ -56,8 +56,8 @@ If nco_type == "ah", the sublist needs to include another vector named "event" a
 (default 1). If nco_type == "negbin", the sublist needs to include a vector "init" as the initial values,
 which can be NA.}
 
-\item{haz_correct}{logical, whether the baseline hazard function will be collected so that the hazard functions
-for all individuals are non-negative.}
+\item{surv_correct}{logical, whether the survival function will be corrected post hoc to be non-increasing and
+fall between 0 and 1, default to be TRUE.}
 
 \item{tmax}{The maximal time to calculate the counterfactual marginal survival functions. Default to be the 
 maximal event time multiplied by 1.05;}
@@ -77,13 +77,13 @@ N <- 2000
 U <- runif(N); X <- runif(N)
 expit  <-  function(x) exp(x)/(1 + exp(x))
 A <- rbinom(N, 1, expit(-3 + 5 * U + 1 * X))
-Y <- rexp(N, 0.2 + 1.5 * U + 0.2 * X + 0.2 * A)
-D <- as.numeric(Y < 5)
-Y[D == 0] <- 5
+Y <- rexp(N, 0.5 * U + 0.2 * X + 0.2 * A)
+D <- as.numeric(Y < 4)
+Y[D == 0] <- 4
 Z <- rnorm(N, 2 * U + 0.5 * X)
 W2 <- rexp(N, 0.1 + 1 * U + 0.1 * X)
-D2 <- as.numeric(W2 < 5)
-W2[D2 == 0] <- 5
+D2 <- as.numeric(W2 < 4)
+W2[D2 == 0] <- 4
 W <- cbind(W1 = rnbinom(N, size = 25, mu = exp(2.5 * U + 0.2 * X)),
            W2)
 ## Obtain the counterfactual marginal survival curves under a = 0, 1
@@ -102,7 +102,7 @@ p2sls_survfunc_a0 <- p2sls.ah.survfunc(Y = Y, D = D, A = A, a = 0, X = X,
 
 ## Plot the counterfactual marginal survival functions
 plot(survfunc ~ t, data = p2sls_survfunc_a0, type = "l", lwd = 2,
-    xlab = "Time", ylab = "Survival function")
+    xlab = "Time", ylim = c(0, 1), ylab = "Survival function")
 lines(survfunc ~ t, data = p2sls_survfunc_a1, lwd = 2, col = "red") 
 legend("topright", legend = c("a = 0", "a = 1"), lwd = 2,
       col = c("black", "red"))

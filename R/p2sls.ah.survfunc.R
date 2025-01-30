@@ -26,8 +26,8 @@
 #' If nco_type == "ah", the sublist needs to include another vector named "event" as the event indicator
 #' (default 1). If nco_type == "negbin", the sublist needs to include a vector "init" as the initial values,
 #' which can be NA.
-#' @param haz_correct logical, whether the baseline hazard function will be collected so that the hazard functions
-#' for all individuals are non-negative.
+#' @param surv_correct logical, whether the survival function will be corrected post hoc to be non-increasing and
+#' fall between 0 and 1, default to be TRUE.
 #' @param tmax The maximal time to calculate the counterfactual marginal survival functions. Default to be the 
 #' maximal event time multiplied by 1.05;
 #' @param nt Number of time points to evaluate the survival functions, evenly distributed between 0 and tmax. 
@@ -73,7 +73,7 @@ p2sls.ah.survfunc <- function(Y, D, A, a, X = NULL, W, Z = NULL, Xw = NULL,
                               Xy = NULL,
                               nco_type = NULL,
                               nco_args = NULL,
-                              haz_correct = T,
+                              surv_correct = T,
                               tmax = NULL, nt = 1000) {
   
   
@@ -358,12 +358,6 @@ p2sls.ah.survfunc <- function(Y, D, A, a, X = NULL, W, Z = NULL, Xw = NULL,
   }
   haz_i <- haz0_i + c(cov_2s %*% param_2s)
   
-  ## correct the baseline hazard so that estimated hazard function is non-negative for all
-  ## subjects
-  if (haz_correct == T) {
-    haz0_i <- pmax(haz0_i, 0)
-    haz0_k <- pmax(haz0_k, 0)
-  }
   
   cumhaz0_k <- cumsum(haz0_k)
   cumhaz0_2s <- stepfun(x = unique(t1), y = c(0, cumhaz0_k))
@@ -374,18 +368,21 @@ p2sls.ah.survfunc <- function(Y, D, A, a, X = NULL, W, Z = NULL, Xw = NULL,
   
   
   tseq <- seq(0, tmax, length.out = nt)
-  survfunc <- tseq * NA
+  survfunc <- survfunc_final <- tseq * NA
   
   for (i in 1:nt) {
     ti <- tseq[i]
     survfunc[i] <- exp(-ti * beta_a * a) * mean(c(exp(ti * beta_a * A1)) * exp(-cumhaz0_2s(ti) - ti * linpred))
-    
-    if (i >= 2 & haz_correct == T) {
-      survfunc[i] <- min(survfunc[i], survfunc[i - 1])  ## survival function must be non-increasing
-    }
   }
   
-  out <- data.frame(t = tseq, survfunc = survfunc)
+  if (surv_correct == T) {
+    for (i in 1:nt) {
+      survfunc_final <- min(survfunc[1:i])
+    }
+  } else {
+    survfunc_final <- survfunc
+  }
+  out <- data.frame(t = tseq, survfunc = survfunc_final)
   
   return(out)
 }
