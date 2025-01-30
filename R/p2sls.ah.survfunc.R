@@ -377,7 +377,7 @@ p2sls.ah.survfunc <- function(Y, D, A, a, X = NULL, W, Z = NULL, Xw = NULL,
   
   if (surv_correct == T) {
     for (i in 1:nt) {
-      survfunc_final <- min(min(survfunc[1:i]), 1)
+      survfunc_final[i] <- min(min(survfunc[1:i]), 1)
     }
   } else {
     survfunc_final <- survfunc
