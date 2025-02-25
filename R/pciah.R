@@ -277,7 +277,7 @@ p2sls.ah <- function(Y, D, A, X = NULL, W, Z = NULL, Xw = NULL,
     if (is.null(offset_j)) {
       offset_j <- rep(0, nn)
     }
-    event_j <- nco_args[[j]]$event
+    event_j <- nco_args[[j]]$event[Y_order]
     if (is.null(event_j)) {
       if (nco_type[j] == "ah") {
         warning("Event indicator for the NCO not specified -- assume no censoring.")
