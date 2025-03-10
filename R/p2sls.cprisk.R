@@ -69,38 +69,29 @@ p2sls.cprisk <- function(times, cause, A, a, X, Z,
   
   ## first stage model
   mod1 <- lin_ah(time = W, event = Dc, covariates = cbind(A, X, Z))
-  
-  
-  
-  p2sls_result <- p2sls.ah(Y = Y, D = D, A = A, 
-                           Xw = cbind(A, X, Z), Xy = X,
-                           W = W, Z = Z, variance = F,
-                           nco_type = "ah",
-                           nco_args = list(list(offset = rep(0, N), event = Dc)))
-  
-  
-  param1 <- mod1$ESTIMATE  
-  mu1 <- as.numeric(cbind(A, X, Z) %*% param1)  ## Linear predictors in the first stage model
-  mu1a <- as.numeric(cbind(a, X, Z) %*% param1)  ## Linear predictors in the first stage model, fix A=a
-  haz1_func <- stepfun(unique(sort(times)), c(0, mod1s$HAZ))
-  haz1_tseq <- haz1_func(tseq)
+  param1 <- mod1$ESTIMATE 
+  mu1 <- as.numeric(cbind(A, X, Z) %*% mod1$ESTIMATE)
+
   
   cumhaz1_func <- stepfun(x = unique(sort(times)),
                           y = c(0, mod1$CUMHAZ_K))
   cumhaz1_tseq <- cumhaz1_func(tseq)
   
   ## second stage model
-  mod0 <- lin_ah(time = Y, event = D, covariates = cbind(A, X, mu1))
+  mod2s <- lin_ah(time = Y, event = D, covariates = cbind(A, X, mu1))
   
-  param0 <- mod0$ESTIMATE  
-  mu0 <- as.numeric(cbind(A, X, mu1) %*% param0)  ## Linear predictors in the first stage model
-  mu0a <- as.numeric(cbind(a, X, mu0) %*% param0)  ## Linear predictors in the first stage model, fix A=a
+  beta_a <- mod2s$ESTIMATE[1]  
   
-  
+  ## marginal ah model for the primary event
+  mod0 <- lin_ah(time = Y, event = D, covariates = cbind(A, X, Z))
+  param0 <- mod0$ESTIMATE
+  mu0 <- as.numeric(cbind(A, X, Z) %*% param0)  ## Linear predictors in the first stage model
+ 
   cumhaz0_func <- stepfun(x = unique(sort(times)),
                           y = c(0, mod0$CUMHAZ_K))
-  cumhaz0_tseq <- cumhaz0_func(tseq)
+  cumhaz0_tseq <- cumhaz0_func(tseq) 
   
+ 
   ## obtain the estimated conditional survival functions
   mod_axz <- lin_ah(time = times,
                     event = as.numeric(cause >= 0),
@@ -110,7 +101,7 @@ p2sls.cprisk <- function(times, cause, A, a, X, Z,
                          y = c(0, mod_axz$CUMHAZ_K))
   cumhaz_tseq <- cumhaz_func(tseq)
   
-  mod_axz_linpred <- c(cbind(A, X, Z) %*% mod_axz$ESTIMATE)
+  mu_axz <- c(cbind(A, X, Z) %*% mod_axz$ESTIMATE)
   
   ## calculate the counterfactual marginal survival functions separately
   tint <- tmax / (nt - 1) ## length of the interval
@@ -120,15 +111,15 @@ p2sls.cprisk <- function(times, cause, A, a, X, Z,
     cif1_a_tseq <- cif0_a_tseq <- rep(NA, nt)
   
   for (tt in seq_along(tseq)) {
-    surv_tt <- exp(-cumhaz_tseq[tt] - mod_axz_linpred * tseq[tt])
-    surva_tseq[tt] <- mean(exp(-mu0a * tseq[tt] - mu1a * tseq[tt] + mu0 * tseq[tt] + mu1 * tseq[tt]) * surv_tt)
+    surv_tt <- exp(-cumhaz_tseq[tt] - mu_axz * tseq[tt])
+    surva_tseq[tt] <- mean(exp(-beta_a * a * tseq[tt] + beta_a * A * tseq[tt]) * surv_tt)
     
     if (surv_correct == T & tt > 1) {
-      surva_tseq[tt] <- min(surva_tseq[tt], surva_tseq[tt])
+      surva_tseq[tt] <- min(surva_tseq[tt - 1], surva_tseq[tt])
     }
     
-    haz1_a_num_tseq[tt] <- mean(mu1a * exp(-mu0a * tseq[tt] - mu1a * tseq[tt] + mu0 * tseq[tt] + mu1 * tseq[tt]) * surv_tt)
-    haz0_a_num_tseq[tt] <- mean(mu0a * exp(-mu0a * tseq[tt] - mu1a * tseq[tt] + mu0 * tseq[tt] + mu1 * tseq[tt]) * surv_tt)
+    haz1_a_num_tseq[tt] <- mean(mu1 * exp(-beta_a * a * tseq[tt] + beta_a * A * tseq[tt]) * surv_tt)
+    haz0_a_num_tseq[tt] <- mean(mu0 * exp(-beta_a * a * tseq[tt] + beta_a * A * tseq[tt]) * surv_tt)
   }
   
   haz1_a_tseq <- haz1_a_num_tseq / surva_tseq
