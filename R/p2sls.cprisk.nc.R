@@ -1,4 +1,4 @@
-#' Proximal two-stage-least-squares with survival outcome using competing risks as negative control outcomes
+#' Proximal two-stage-least-squares with survival outcome using competing risks as negative control outcomes, but the exposure has an effect to the competing risk during the initial period after the treatment
 #'
 #' This function computes the counterfactual marginal cumulative cause-specific hazard functions and cumulative incidence functions for the proximal 
 #' two-stage-least-squares with survival outcome, using competing risks as the negative control outcomes
@@ -30,8 +30,8 @@
 #' Z <- rnorm(N, 2 * U + 0.5 * X)
 #' ## Obtain the counterfactual marginal survival curves under a = 0, 1
 #'
-#' p2sls_rslt_a1 <- p2sls.cprisk(times = times, cause = cause, A = A, a = 1, X = X, Z = Z)
-#' p2sls_rslt_a0 <- p2sls.cprisk(times = times, cause = cause, A = A, a = 0, X = X, Z = Z)
+#' p2sls_rslt_a1 <- p2sls.cprisk.nc(times = times, cause = cause, nc_time = 2, A = A, a = 1, X = X, Z = Z)
+#' p2sls_rslt_a0 <- p2sls.cprisk.nc(times = times, cause = cause, nc_time = 2, A = A, a = 0, X = X, Z = Z)
 #' 
 #' 
 #' ## Plot the counterfactual marginal cause-specific cumulative hazard function for the primary event 
@@ -50,9 +50,9 @@
 #'       
 #' @export
 #' 
-p2sls.cprisk <- function(times, cause, A, a, X, Z, 
-                         surv_correct = T,
-                         tmax = NULL, nt = 1000) {
+p2sls.cprisk.nc <- function(times, cause, A, a, X, Z, nc_time, 
+                            surv_correct = T,
+                            tmax = NULL, nt = 1000) {
   
   if (is.null(tmax)) {
     tmax <- max(times) * 1.05
@@ -68,17 +68,18 @@ p2sls.cprisk <- function(times, cause, A, a, X, Z,
   
   
   ## first stage model
-  mod1 <- lin_ah(time = W, event = Dc, covariates = cbind(A, X, Z))
-  param1 <- mod1$ESTIMATE 
-  mu1 <- as.numeric(cbind(A, X, Z) %*% mod1$ESTIMATE)
-
+  time_post <- times[times > nc_time]
+  cov_post <- cbind(A, X, Z)[times > nc_time,]
+  D_post <- D[times > nc_time]
+  Dc_post <- Dc[times > nc_time]
   
-  cumhaz1_func <- stepfun(x = unique(sort(times)),
-                          y = c(0, mod1$CUMHAZ_K))
-  cumhaz1_tseq <- cumhaz1_func(tseq)
+  mod1_nc <- lin_ah(time = time_post, event = Dc_post, covariates = cov_post)
+  param1_nc <- mod1_nc$ESTIMATE 
+  mu1_nc <- as.numeric(cbind(A, X, Z) %*% mod1$ESTIMATE)
+  
   
   ## second stage model
-  mod2s <- lin_ah(time = Y, event = D, covariates = cbind(A, X, mu1))
+  mod2s <- lin_ah(time = Y, event = D, covariates = cbind(A, X, mu1_nc))
   
   beta_a <- mod2s$ESTIMATE[1]  
   
@@ -86,43 +87,62 @@ p2sls.cprisk <- function(times, cause, A, a, X, Z,
   mod0 <- lin_ah(time = Y, event = D, covariates = cbind(A, X, Z))
   param0 <- mod0$ESTIMATE
   mu0 <- as.numeric(cbind(A, X, Z) %*% param0)  ## Linear predictors in the first stage model
- 
+  
   cumhaz0_func <- stepfun(x = unique(sort(times)),
                           y = c(0, mod0$CUMHAZ_K))
   cumhaz0_tseq <- cumhaz0_func(tseq) 
   
- 
+  
   ## obtain the estimated conditional survival functions
-  mod_axz <- lin_ah(time = times,
-                    event = as.numeric(cause >= 0),
-                    covariates = cbind(A, X, Z))
+  mod_axz_pre <- lin_ah(time = pmin(times, nc_time),
+                        event = as.numeric(cause >= 0 & times <= nc_time),
+                        covariates = cbind(A, X, Z))
   
-  cumhaz_func <- stepfun(x = unique(sort(times)),
-                         y = c(0, mod_axz$CUMHAZ_K))
+  haz_axz_pre <- data.frame(time = unique(sort(pmin(times, nc_time))),
+                            haz = mod_axz_pre$HAZ)
+  
+  mu_axz_pre <- c(cbind(A, X, Z) %*% mod_axz_pre$ESTIMATE)
+  
+  mod_axz_post <- lin_ah(time = time_post,
+                         event = D_post,
+                         covariates = cov_post)
+  
+  haz_axz_post <- data.frame(time = unique(sort(time_post)),
+                             haz = mod_axz_post$HAZ)
+  
+  mu_axz_post <- c(cbind(A, X, Z) %*% mod_axz_post$ESTIMATE)
+  
+  haz_mat <- rbind(haz_axz_pre, haz_axz_post)
+  haz_mat$cumhaz <- cumsum(haz_mat$haz)
+  
+  cumhaz_func <- stepfun(haz_mat$time,
+                         c(0, haz_mat$cumhaz))
+  
   cumhaz_tseq <- cumhaz_func(tseq)
-  
-  mu_axz <- c(cbind(A, X, Z) %*% mod_axz$ESTIMATE)
   
   ## calculate the counterfactual marginal survival functions separately
   tint <- tmax / (nt - 1) ## length of the interval
   
-  surva_tseq <- cumhaz1_a_tseq <- cumhaz0_a_tseq <- 
-    haz1_a_num_tseq <- haz0_a_num_tseq <-
-    cif1_a_tseq <- cif0_a_tseq <- rep(NA, nt)
+  surva_tseq <- cumhaz0_a_tseq <- 
+    haz0_a_num_tseq <- cif0_a_tseq <- rep(NA, nt)
   
   for (tt in seq_along(tseq)) {
-    surv_tt <- exp(-cumhaz_tseq[tt] - mu_axz * tseq[tt])
-    surva_tseq[tt] <- mean(exp(-beta_a * a * tseq[tt] + beta_a * A * tseq[tt]) * surv_tt)
+    t1 <- tseq[tt]
+    if (t1 <= nc_time) {
+      surv_tt <- exp(-cumhaz_tseq[tt] - mu_axz_pre * t1)
+    } else {
+      surv_tt <- exp(-cumhaz_tseq[tt] - mu_axz_pre * nc_time - mu_axz_post * (t1 - nc_time))
+    }
+    surva_tseq[tt] <- mean(exp(-beta_a * a * t1 + beta_a * A * t1) * surv_tt)
     
     if (surv_correct == T & tt > 1) {
       surva_tseq[tt] <- min(surva_tseq[tt - 1], surva_tseq[tt])
     }
     
-    haz1_a_num_tseq[tt] <- mean(mu1 * exp(-beta_a * a * tseq[tt] + beta_a * A * tseq[tt]) * surv_tt)
-    haz0_a_num_tseq[tt] <- mean((mu0 + beta_a * a - beta_a * A) * exp(-beta_a * a * tseq[tt] + beta_a * A * tseq[tt]) * surv_tt)
+    haz0_a_num_tseq[tt] <- mean((mu0 + beta_a * a - beta_a * A) * exp(-beta_a * a * t1 + beta_a * A * t1) * surv_tt)
   }
   
-  haz1_a_tseq <- haz1_a_num_tseq / surva_tseq
+
   haz0_a_tseq <- haz0_a_num_tseq / surva_tseq
   
   ## obtain the counterfactual marginal cumulative cause-specific hazard functions
@@ -131,31 +151,27 @@ p2sls.cprisk <- function(times, cause, A, a, X, Z,
       cumhaz0_a_tseq[tt] <- 0; cumhaz1_a_tseq[tt] <- 0
     } else {
       cumhaz0_a_tseq[tt] <- cumhaz0_a_tseq[tt - 1] + tint * haz0_a_tseq[tt]
-      cumhaz1_a_tseq[tt] <- cumhaz1_a_tseq[tt - 1] + tint * haz1_a_tseq[tt]
     }
   }
   
   cumhaz0_a <- cumhaz0_a_tseq + cumhaz0_tseq
-  cumhaz1_a <- cumhaz1_a_tseq + cumhaz1_tseq
 
+  
   ## obtain the counterfactual marginal cumulative incidence functions
   
   for (tt in seq_along(tseq)) {
     if (tt == 1) {
-      cif0_a_tseq[tt] <- 0; cif1_a_tseq[tt] <- 0
+      cif0_a_tseq[tt] <- 0; 
     } else {
       cif0_a_tseq[tt] <- cif0_a_tseq[tt - 1] + surva_tseq[tt] * (cumhaz0_tseq[tt] - cumhaz0_tseq[tt - 1]) + tint * haz0_a_num_tseq[tt]
-      cif1_a_tseq[tt] <- cif1_a_tseq[tt - 1] + surva_tseq[tt] * (cumhaz1_tseq[tt] - cumhaz1_tseq[tt - 1]) + tint * haz0_a_num_tseq[tt]
     }
   }
   
-
+  
   out <- data.frame(t = tseq, 
                     survfunc = surva_tseq,
                     cumhaz0 = cumhaz0_a,
-                    cumhaz1 = cumhaz1_a,
-                    cif0 = cif0_a_tseq, 
-                    cif1 = cif1_a_tseq)
+                    cif0 = cif0_a_tseq)
   
   return(out)
 }
