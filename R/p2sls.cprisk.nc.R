@@ -75,8 +75,7 @@ p2sls.cprisk.nc <- function(times, cause, A, a, X, Z, nc_time,
   
   mod1_nc <- lin_ah(time = time_post, event = Dc_post, covariates = cov_post)
   param1_nc <- mod1_nc$ESTIMATE 
-  mu1_nc <- as.numeric(cbind(A, X, Z) %*% mod1$ESTIMATE)
-  
+  mu1_nc <- as.numeric(as.matrix(cbind(A, X, Z)) %*% param1_nc)
   
   ## second stage model
   mod2s <- lin_ah(time = Y, event = D, covariates = cbind(A, X, mu1_nc))
@@ -86,7 +85,7 @@ p2sls.cprisk.nc <- function(times, cause, A, a, X, Z, nc_time,
   ## marginal ah model for the primary event
   mod0 <- lin_ah(time = Y, event = D, covariates = cbind(A, X, Z))
   param0 <- mod0$ESTIMATE
-  mu0 <- as.numeric(cbind(A, X, Z) %*% param0)  ## Linear predictors in the first stage model
+  mu0 <- as.numeric(as.matrix(cbind(A, X, Z)) %*% param0)  ## Linear predictors in the first stage model
   
   cumhaz0_func <- stepfun(x = unique(sort(times)),
                           y = c(0, mod0$CUMHAZ_K))
@@ -101,7 +100,7 @@ p2sls.cprisk.nc <- function(times, cause, A, a, X, Z, nc_time,
   haz_axz_pre <- data.frame(time = unique(sort(pmin(times, nc_time))),
                             haz = mod_axz_pre$HAZ)
   
-  mu_axz_pre <- c(cbind(A, X, Z) %*% mod_axz_pre$ESTIMATE)
+  mu_axz_pre <- c(as.matrix(cbind(A, X, Z)) %*% mod_axz_pre$ESTIMATE)
   
   mod_axz_post <- lin_ah(time = time_post,
                          event = D_post,
@@ -110,7 +109,7 @@ p2sls.cprisk.nc <- function(times, cause, A, a, X, Z, nc_time,
   haz_axz_post <- data.frame(time = unique(sort(time_post)),
                              haz = mod_axz_post$HAZ)
   
-  mu_axz_post <- c(cbind(A, X, Z) %*% mod_axz_post$ESTIMATE)
+  mu_axz_post <- c(as.matrix(cbind(A, X, Z)) %*% mod_axz_post$ESTIMATE)
   
   haz_mat <- rbind(haz_axz_pre, haz_axz_post)
   haz_mat$cumhaz <- cumsum(haz_mat$haz)
@@ -148,7 +147,7 @@ p2sls.cprisk.nc <- function(times, cause, A, a, X, Z, nc_time,
   ## obtain the counterfactual marginal cumulative cause-specific hazard functions
   for (tt in seq_along(tseq)) {
     if (tt == 1) {
-      cumhaz0_a_tseq[tt] <- 0; cumhaz1_a_tseq[tt] <- 0
+      cumhaz0_a_tseq[tt] <- 0; 
     } else {
       cumhaz0_a_tseq[tt] <- cumhaz0_a_tseq[tt - 1] + tint * haz0_a_tseq[tt]
     }
