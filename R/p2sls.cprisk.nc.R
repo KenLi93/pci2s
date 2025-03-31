@@ -6,7 +6,8 @@
 #' @param times an n-vector of observed time to event outcomes
 #' @param cause an n-vector of indicators for causes of events; in each entry, 0 indicates primary event, 1 indicates competing risks, and -1 indicates censoring
 #' @param A an n-vector of primary exposure
-#' @param X an n * nX matrix of adjusted covariates , can be empty
+#' @param X1 an n * nX matrix of adjusted covariates for stage 1, can be empty
+#' @param X2 an n * nX matrix of adjusted covariates for stage 2. Defaults to X1 if NULL 
 #' @param Z an n * nZ matrix of negative control exposure (NCE)
 #' @param nc_time time after which the exposure has no effect on the competing risk
 #' @returns A data frame with two columns: t: time points where the counterfactual marginal survival functions are evaluated; 
