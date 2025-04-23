@@ -6,7 +6,8 @@
 #' @param times an n-vector of observed time to event outcomes
 #' @param cause an n-vector of indicators for causes of events; in each entry, 0 indicates primary event, 1 indicates competing risks, and -1 indicates censoring
 #' @param A an n-vector of primary exposure
-#' @param X an n * nX matrix of adjusted covariates , can be empty
+#' @param X1 an n * nX matrix of adjusted covariates for stage 1, can be empty
+#' @param X2 an n * nX matrix of adjusted covariates for stage 2. Defaults to X1 if NULL 
 #' @param Z an n * nZ matrix of negative control exposure (NCE)
 #' @param nc_time time after which the exposure has no effect on the competing risk
 #' @returns A data frame with two columns: t: time points where the counterfactual marginal survival functions are evaluated; 
@@ -28,13 +29,16 @@
 #' p2sls_rslt <- p2sls.cprisk.nc(times = times, cause = cause, nc_time = 2, A = A, X = X, Z = Z, bootstrap = T, nboot = 100)
 #' @export
 #' 
-p2sls.cprisk.nc <- function(times, cause, A, X, Z, nc_time, 
+p2sls.cprisk.nc <- function(times, cause, A, X1, X2=NULL, Z, nc_time, 
                             bootstrap = F, nboot = 1000, conf.level = 0.95) {
+  if (!is.null(X1) && is.null(X2)) {
+        X2  <- X1
+  }
   
-  est <- p2sls.cprisk.nc.est(times, cause, A, X, Z, nc_time)
+  est <- p2sls.cprisk.nc.est(times, cause, A, X1,X2, Z, nc_time)
   
   if (bootstrap == T) {
-    boot_ci <- p2sls.cprisk.nc.boot(times, cause, A, X, Z, nc_time, conf.level, nboot)
+    boot_ci <- p2sls.cprisk.nc.boot(times, cause, A, X1,X2, Z, nc_time, conf.level, nboot)
     out <- c(est, boot_ci)
   } else {
     out <- est
@@ -46,8 +50,7 @@ p2sls.cprisk.nc <- function(times, cause, A, X, Z, nc_time,
 
 
 ## point estimates
-p2sls.cprisk.nc.est <- function(times, cause, A, X, Z, nc_time) {
-  
+p2sls.cprisk.nc.est <- function(times, cause, A, X1,X2, Z, nc_time) {
   nn <- length(times)
   # clean data type
   Y <- W <- times
@@ -57,16 +60,16 @@ p2sls.cprisk.nc.est <- function(times, cause, A, X, Z, nc_time) {
   
   ## first stage model
   time_post <- times[times > nc_time]
-  cov_post <- cbind(A, X, Z)[times > nc_time,]
+  cov_post <- cbind(A, X1, Z)[times > nc_time,]
   D_post <- D[times > nc_time]
   Dc_post <- Dc[times > nc_time]
   
   mod1_nc <- lin_ah(time = time_post, event = Dc_post, covariates = cov_post)
   param1_nc <- mod1_nc$ESTIMATE 
-  mu1_nc <- as.numeric(as.matrix(cbind(A, X, Z)) %*% param1_nc)
+  mu1_nc <- as.numeric(as.matrix(cbind(A, X1, Z)) %*% param1_nc)
   
   ## second stage model
-  mod2s <- lin_ah(time = Y, event = D, covariates = cbind(A, X, mu1_nc))
+  mod2s <- lin_ah(time = Y, event = D, covariates = cbind(A, X2, mu1_nc))
   
   beta_a <- mod2s$ESTIMATE[1]  
   
@@ -77,10 +80,11 @@ p2sls.cprisk.nc.est <- function(times, cause, A, X, Z, nc_time) {
 
 
 ## bootstrap inference
-p2sls.cprisk.nc.boot <- function(times, cause, A, X, Z, nc_time, conf.level = 0.95, nboot = 1000) {
+p2sls.cprisk.nc.boot <- function(times, cause, A, X1, X2, Z, nc_time, conf.level = 0.95, nboot = 1000) {
   
   nn <- length(times)
-  X <- as.matrix(X)
+  X1 <- as.matrix(X1)
+  X2 <- as.matrix(X2)
   Z <- as.matrix(Z)
   # clean data type
   
@@ -91,10 +95,11 @@ p2sls.cprisk.nc.boot <- function(times, cause, A, X, Z, nc_time, conf.level = 0.
     times_boot <- times[boot_id]
     cause_boot <- cause[boot_id]
     A_boot <- A[boot_id]
-    X_boot <- X[boot_id,, drop = F]
+    X1_boot <- X1[boot_id,, drop = F]
+    X2_boot <- X2[boot_id,, drop = F]
     Z_boot <- Z[boot_id,, drop = F] 
     
-    boot_result[[bb]] <- p2sls.cprisk.nc.est(times_boot, cause_boot, A_boot, X_boot, Z_boot, nc_time)
+    boot_result[[bb]] <- p2sls.cprisk.nc.est(times_boot, cause_boot, A_boot, X1_boot, X2_boot, Z_boot, nc_time)
   }
   alp <- 1 - conf.level
   all_beta_a <- sapply(boot_result, function(x) x$beta_a)
