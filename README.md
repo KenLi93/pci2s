@@ -1,7 +1,7 @@
 
 <!-- README.md is generated from README.Rmd. Please edit that file -->
 
-# pci2s: Regression-based proximal causal inference using two-stage-least-squares
+# pci2s: Regression-based proximal causal inference using Two-Stage Regressions
 
 <!-- badges: start -->
 
